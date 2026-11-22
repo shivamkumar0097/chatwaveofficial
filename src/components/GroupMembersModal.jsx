@@ -5,6 +5,7 @@ import Avatar from '@/components/Avatar'
 export default function GroupMembersModal({
   chat,
   contacts,
+  currentUserId,
   isAdmin = false,
   onClose,
   onAdd,
@@ -20,6 +21,7 @@ export default function GroupMembersModal({
   const [newName, setNewName] = useState('')
   const [pendingTransferId, setPendingTransferId] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
 
   const members = chat.members || []
   const memberIds = chat.memberIds ?? members.map((member) => member.id)
@@ -125,8 +127,7 @@ export default function GroupMembersModal({
           </div>
         )}
 
-        {isAdmin && (
-          <div className="border-b border-white/[0.06] px-4 py-3">
+        <div className="border-b border-white/[0.06] px-4 py-3">
             <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-3 py-2">
               <Search size={15} className="shrink-0 text-wa-muted" />
               <input
@@ -165,7 +166,6 @@ export default function GroupMembersModal({
               )}
             </div>
           </div>
-        )}
 
         <div className="p-2">
           <p className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-wa-muted">
@@ -197,9 +197,9 @@ export default function GroupMembersModal({
                       : 'member'}
                 </span>
               </span>
-              {isAdmin && chat.createdBy !== member.id && (
+              {member.id !== currentUserId && (
                 <>
-                  {pendingTransferId === member.id ? (
+                  {isAdmin && (pendingTransferId === member.id ? (
                     <button
                       type="button"
                       disabled={Boolean(busyId)}
@@ -224,15 +224,16 @@ export default function GroupMembersModal({
                     >
                       <Crown size={15} />
                     </button>
-                  )}
+                  ))}
                   <button
                     type="button"
                     disabled={Boolean(busyId)}
                     onClick={() => run(member.id, onRemove)}
-                    className="icon-btn text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+                    className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
                     aria-label={`Remove ${member.name}`}
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={14} />
+                    Remove
                   </button>
                 </>
               )}
@@ -276,14 +277,55 @@ export default function GroupMembersModal({
           </div>
         ) : (
           <div className="border-t border-white/[0.07] p-3">
-            <button
-              type="button"
-              onClick={onLeave}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 py-2.5 text-[12.5px] font-semibold text-red-300 transition-colors hover:bg-red-500/20"
-            >
-              <LogOut size={15} />
-              Leave group
-            </button>
+            {confirmLeave ? (
+              <div className="animate-pop-in rounded-2xl border border-red-400/20 bg-red-500/[0.06] p-3.5">
+                <div className="flex items-start gap-2.5">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-red-500/15 text-red-300">
+                    <LogOut size={16} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-wa-text">Leave this group?</p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-wa-muted">
+                      You won't be able to send or receive messages in{' '}
+                      <span className="font-medium text-wa-text">{chat.name}</span> unless you're
+                      added back.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmLeave(false)}
+                    className="flex-1 rounded-xl border border-white/10 py-2.5 text-[12px] font-medium text-wa-muted transition-colors hover:bg-white/[0.05]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(busyId)}
+                    onClick={() =>
+                      run('leave', async () => {
+                        await onLeave?.()
+                        setConfirmLeave(false)
+                      })
+                    }
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-500/20 py-2.5 text-[12px] font-semibold text-red-200 transition-colors hover:bg-red-500/30 disabled:opacity-50"
+                  >
+                    <LogOut size={14} />
+                    Leave group
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmLeave(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 py-2.5 text-[12.5px] font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+              >
+                <LogOut size={15} />
+                Leave group
+              </button>
+            )}
           </div>
         )}
       </div>

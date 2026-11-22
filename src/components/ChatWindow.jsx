@@ -375,37 +375,45 @@ export default function ChatWindow({
         >
           <ArrowLeft size={20} />
         </button>
-        <Avatar
-          name={chat.name}
-          color={chat.avatarColor}
-          src={chat.avatarUrl}
-          size="sm"
-          online={!chat.isGroup && chat.online}
-        />
-        <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-1.5 truncate text-[16px] font-semibold tracking-tight">
-            <span className="truncate">{chat.name}</span>
-            {disappearingTimer !== 'off' && (
-              <Clock size={12} className="shrink-0 text-wa-green" title="Disappearing messages on" />
-            )}
-            {pinned && <Pin size={12} className="shrink-0 rotate-45 text-wa-muted" />}
-            {muted && <BellOff size={13} className="shrink-0 text-wa-muted" />}
-          </h1>
-          <p
-            className={`truncate text-[12.5px] ${
-              typing ? 'text-accent-2' : chat.online ? 'text-accent-2/90' : 'text-wa-muted'
-            }`}
-          >
-            {typing && (
-              <span className="mr-1 inline-flex items-end gap-0.5 align-middle">
-                <span className="typing-dot h-1 w-1 rounded-full bg-accent-2" />
-                <span className="typing-dot h-1 w-1 rounded-full bg-accent-2" />
-                <span className="typing-dot h-1 w-1 rounded-full bg-accent-2" />
-              </span>
-            )}
-            {status}
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => (chat.isGroup ? setMembersOpen(true) : setInfoOpen(true))}
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1 py-1 text-left transition-colors hover:bg-white/[0.05]"
+          aria-label={chat.isGroup ? 'View group members' : 'View contact'}
+          title={chat.isGroup ? 'Group members' : 'View contact'}
+        >
+          <Avatar
+            name={chat.name}
+            color={chat.avatarColor}
+            src={chat.avatarUrl}
+            size="sm"
+            online={!chat.isGroup && chat.online}
+          />
+          <div className="min-w-0 flex-1">
+            <h1 className="flex items-center gap-1.5 truncate text-[16px] font-semibold tracking-tight">
+              <span className="truncate">{chat.name}</span>
+              {disappearingTimer !== 'off' && (
+                <Clock size={12} className="shrink-0 text-wa-green" title="Disappearing messages on" />
+              )}
+              {pinned && <Pin size={12} className="shrink-0 rotate-45 text-wa-muted" />}
+              {muted && <BellOff size={13} className="shrink-0 text-wa-muted" />}
+            </h1>
+            <p
+              className={`truncate text-[12.5px] ${
+                typing ? 'text-accent-2' : chat.online ? 'text-accent-2/90' : 'text-wa-muted'
+              }`}
+            >
+              {typing && (
+                <span className="mr-1 inline-flex items-end gap-0.5 align-middle">
+                  <span className="typing-dot h-1 w-1 rounded-full bg-accent-2" />
+                  <span className="typing-dot h-1 w-1 rounded-full bg-accent-2" />
+                  <span className="typing-dot h-1 w-1 rounded-full bg-accent-2" />
+                </span>
+              )}
+              {status}
+            </p>
+          </div>
+        </button>
         <div className="flex items-center gap-0.5 sm:gap-1">
           {!chat.isGroup && (
             <>
@@ -1033,7 +1041,8 @@ export default function ChatWindow({
           <GroupMembersModal
             chat={chat}
             contacts={contacts}
-            isAdmin={chat.createdBy === user?.id}
+            currentUserId={user?.id}
+            isAdmin={chat.createdBy ? chat.createdBy === user?.id : true}
             onClose={() => setMembersOpen(false)}
             onAdd={onAddMember}
             onRemove={onRemoveMember}
