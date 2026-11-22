@@ -201,32 +201,31 @@ export default function AuthScreen() {
   const tabRef = useRef(null)
   const tabLastSwipe = useRef(0)
   const [tabDragX, setTabDragX] = useState(0)
+  const [tabDragging, setTabDragging] = useState(false)
 
-  const onTabSwipeStart = (event) => {
-    tabSwipe.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId, captured: false }
+  const startTabSwipe = (x, y) => {
+    tabSwipe.current = { x, y }
+    setTabDragging(true)
   }
-  const onTabSwipeMove = (event) => {
+  const moveTabSwipe = (x, y) => {
     const start = tabSwipe.current
     if (!start) return
-    const dx = event.clientX - start.x
-    const dy = event.clientY - start.y
-    if (!start.captured && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
-      tabRef.current?.setPointerCapture?.(start.pointerId)
-      start.captured = true
-    }
+    const dx = x - start.x
+    const dy = y - start.y
     if (Math.abs(dx) < Math.abs(dy)) return
     const half = (tabRef.current?.getBoundingClientRect().width || 200) / 2 - 8
     const limited = isSignup ? Math.min(0, Math.max(-half, dx)) : Math.max(0, Math.min(half, dx))
     setTabDragX(limited)
   }
-  const onTabSwipeEnd = (event) => {
+  const endTabSwipe = (x, y) => {
     const start = tabSwipe.current
     tabSwipe.current = null
+    setTabDragging(false)
     setTabDragX(0)
     if (!start) return
-    const dx = event.clientX - start.x
-    const dy = event.clientY - start.y
-    if (Math.abs(dx) < 35 || Math.abs(dx) < Math.abs(dy) * 1.2) return
+    const dx = x - start.x
+    const dy = y - start.y
+    if (Math.abs(dx) < 22 || Math.abs(dx) < Math.abs(dy) * 1.2) return
     if (dx > 0 && !isSignup) {
       tabLastSwipe.current = Date.now()
       switchMode('signup')
@@ -235,9 +234,26 @@ export default function AuthScreen() {
       switchMode('signin')
     }
   }
+  const cancelTabSwipe = () => {
+    tabSwipe.current = null
+    setTabDragging(false)
+    setTabDragX(0)
+  }
   const onTabClick = (next) => {
     if (Date.now() - tabLastSwipe.current < 400) return
     switchMode(next)
+  }
+  const onTabTouchStart = (event) => {
+    const touch = event.touches[0]
+    if (touch) startTabSwipe(touch.clientX, touch.clientY)
+  }
+  const onTabTouchMove = (event) => {
+    const touch = event.touches[0]
+    if (touch) moveTabSwipe(touch.clientX, touch.clientY)
+  }
+  const onTabTouchEnd = (event) => {
+    const touch = event.changedTouches[0]
+    if (touch) endTabSwipe(touch.clientX, touch.clientY)
   }
 
   const strength = (() => {
@@ -502,15 +518,19 @@ export default function AuthScreen() {
 
                 <div
                   ref={tabRef}
-                  onPointerDown={onTabSwipeStart}
-                  onPointerMove={onTabSwipeMove}
-                  onPointerUp={onTabSwipeEnd}
-                  onPointerCancel={() => { tabSwipe.current = null; setTabDragX(0) }}
-                  className="relative mb-5 grid cursor-grab touch-pan-y grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/[0.06] bg-black/30 p-1 text-[13px] select-none active:cursor-grabbing"
+                  onPointerDown={(event) => { if (event.pointerType !== 'touch') startTabSwipe(event.clientX, event.clientY) }}
+                  onPointerMove={(event) => { if (event.pointerType !== 'touch') moveTabSwipe(event.clientX, event.clientY) }}
+                  onPointerUp={(event) => { if (event.pointerType !== 'touch') endTabSwipe(event.clientX, event.clientY) }}
+                  onPointerCancel={cancelTabSwipe}
+                  onTouchStart={onTabTouchStart}
+                  onTouchMove={onTabTouchMove}
+                  onTouchEnd={onTabTouchEnd}
+                  onTouchCancel={cancelTabSwipe}
+                  className="relative mb-5 grid cursor-grab touch-none grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/[0.06] bg-black/30 p-1 text-[13px] select-none active:cursor-grabbing"
                 >
                   <span
                     className={`absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] rounded-lg bg-white/[0.09] shadow-[0_0_0_1px_rgba(124,92,255,0.22),0_6px_18px_-8px_rgba(124,92,255,0.7)] ${
-                      tabSwipe.current ? '' : 'transition-transform duration-300'
+                      tabDragging ? '' : 'transition-transform duration-300'
                     }`}
                     style={{ transform: `translateX(${isSignup ? '100%' : '0px'}) translateX(${tabDragX}px)` }}
                   />

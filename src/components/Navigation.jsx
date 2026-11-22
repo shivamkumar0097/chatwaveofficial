@@ -46,6 +46,8 @@ export default function Navigation({ active, onChange, mobile = false }) {
   const pointerRef = useRef(null)
   const lastSwipeRef = useRef(0)
   const startRef = useRef({ x: 0, y: 0 })
+  const startIndexRef = useRef(0)
+  const lastPointRef = useRef({ x: 0, y: 0 })
   const [layouts, setLayouts] = useState([])
   const [dragIndex, setDragIndex] = useState(null)
   const [dragDx, setDragDx] = useState(0)
@@ -94,47 +96,53 @@ export default function Navigation({ active, onChange, mobile = false }) {
     return best
   }
 
-  const pointerDown = (event) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return
+  const beginSwipe = (x, y, index) => {
     draggingRef.current = false
-    pointerRef.current = event.pointerId
-    startRef.current = { x: event.clientX, y: event.clientY }
+    pointerRef.current = true
+    startIndexRef.current = index
+    startRef.current = { x, y }
+    lastPointRef.current = { x, y }
   }
 
-  const pointerMove = (event) => {
+  const moveSwipe = (x, y) => {
     if (!pointerRef.current) return
-    const dx = event.clientX - startRef.current.x
-    const dy = event.clientY - startRef.current.y
+    lastPointRef.current = { x, y }
+    const dx = x - startRef.current.x
+    const dy = y - startRef.current.y
     const axis = mobile ? dx : dy
     const cross = mobile ? dy : dx
     if (!draggingRef.current) {
-      if (Math.hypot(dx, dy) < 8) return
+      if (Math.hypot(dx, dy) < 6) return
       if (Math.abs(axis) < Math.abs(cross)) return
       draggingRef.current = true
-      try {
-        event.currentTarget.setPointerCapture(event.pointerId)
-      } catch {}
     }
     setDragDx(axis)
-    setDragIndex(nearestIndex(event.clientX, event.clientY))
+    setDragIndex(nearestIndex(x, y))
   }
 
-  const pointerUp = (event, commit = true) => {
+  const endSwipe = (x, y) => {
     if (!pointerRef.current) return
     const wasDragging = draggingRef.current
     pointerRef.current = null
     draggingRef.current = false
     setDragDx(0)
     if (!wasDragging) return
-    const target = nearestIndex(event.clientX, event.clientY)
+    const dx = x - startRef.current.x
+    const dy = y - startRef.current.y
+    const axis = mobile ? dx : dy
+    let target = nearestIndex(x, y)
+    if (Math.abs(axis) >= 20) {
+      const step = Math.max(0, Math.min(TABS.length - 1, startIndexRef.current + Math.sign(axis)))
+      target = axis > 0 ? Math.max(target, step) : Math.min(target, step)
+    }
     setDragIndex(null)
-    if (commit && target !== activeIndex) {
+    if (target !== activeIndex) {
       lastSwipeRef.current = Date.now()
       onChange(TABS[target].key)
     }
   }
 
-  const pointerCancel = () => {
+  const cancelSwipe = () => {
     pointerRef.current = null
     draggingRef.current = false
     setDragDx(0)
@@ -145,6 +153,41 @@ export default function Navigation({ active, onChange, mobile = false }) {
     if (Date.now() - lastSwipeRef.current < 400) return
     onChange(key)
   }
+
+  const swipeHandlers = (index) => ({
+    onPointerDown: (event) => {
+      if (event.pointerType === 'touch') return
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      beginSwipe(event.clientX, event.clientY, index)
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {}
+    },
+    onPointerMove: (event) => {
+      if (event.pointerType === 'touch') return
+      moveSwipe(event.clientX, event.clientY)
+    },
+    onPointerUp: (event) => {
+      if (event.pointerType === 'touch') return
+      endSwipe(event.clientX, event.clientY)
+    },
+    onPointerCancel: (event) => {
+      if (event.pointerType !== 'touch') cancelSwipe()
+    },
+    onTouchStart: (event) => {
+      const touch = event.touches[0]
+      if (touch) beginSwipe(touch.clientX, touch.clientY, index)
+    },
+    onTouchMove: (event) => {
+      const touch = event.touches[0]
+      if (touch) moveSwipe(touch.clientX, touch.clientY)
+    },
+    onTouchEnd: (event) => {
+      const touch = event.changedTouches[0]
+      if (touch) endSwipe(touch.clientX, touch.clientY)
+    },
+    onTouchCancel: cancelSwipe,
+  })
 
   const baseClass = 'relative z-10 touch-none'
 
@@ -177,10 +220,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
                 itemRefs.current[index] = node
               }}
               type="button"
-              onPointerDown={pointerDown}
-              onPointerMove={pointerMove}
-              onPointerUp={pointerUp}
-              onPointerCancel={pointerCancel}
+              {...swipeHandlers(index)}
               onClick={() => onTabClick(tab.key)}
               className={`${baseClass} flex min-w-16 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition-colors duration-300 ${
                 activeTab ? 'text-wa-green' : 'text-wa-muted'
@@ -216,10 +256,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
               itemRefs.current[index] = node
             }}
             type="button"
-            onPointerDown={pointerDown}
-            onPointerMove={pointerMove}
-            onPointerUp={pointerUp}
-            onPointerCancel={pointerCancel}
+            {...swipeHandlers(index)}
             onClick={() => onTabClick(tab.key)}
             title={tab.label}
             aria-label={tab.label}
