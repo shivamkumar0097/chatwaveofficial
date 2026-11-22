@@ -1,5 +1,7 @@
 # ChatWave
 
+**Live demo: [chatwaveofficial.vercel.app](https://chatwaveofficial.vercel.app)**
+
 A polished, real-time chat application built with React, Vite, Tailwind CSS and Supabase. It ships with a responsive dark interface, authentication, live messaging, presence, read receipts, attachments and a full set of message actions.
 
 ![ChatWave sign-in page](docs/login.png)
