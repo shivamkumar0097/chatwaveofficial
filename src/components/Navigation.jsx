@@ -47,9 +47,12 @@ export default function Navigation({ active, onChange, mobile = false }) {
   const lastSwipeRef = useRef(0)
   const startRef = useRef({ x: 0, y: 0 })
   const startIndexRef = useRef(0)
+  const liveIndexRef = useRef(0)
   const [layouts, setLayouts] = useState([])
   const [dragDx, setDragDx] = useState(0)
+  const [dragBaseIndex, setDragBaseIndex] = useState(null)
   const activeIndex = Math.max(0, TABS.findIndex((tab) => tab.key === active))
+  const effectiveBase = dragBaseIndex ?? activeIndex
 
   useLayoutEffect(() => {
     const measure = () => {
@@ -74,13 +77,13 @@ export default function Navigation({ active, onChange, mobile = false }) {
     return () => observer.disconnect()
   }, [mobile])
 
-  const pill = layouts[activeIndex]
+  const pill = layouts[effectiveBase]
   const pos = (item) => (mobile ? item?.left || 0 : item?.top || 0)
-  const minDrag = layouts.length ? pos(layouts[0]) - pos(layouts[activeIndex]) : 0
-  const maxDrag = layouts.length ? pos(layouts[layouts.length - 1]) - pos(layouts[activeIndex]) : 0
+  const minDrag = layouts.length ? pos(layouts[0]) - pos(layouts[effectiveBase]) : 0
+  const maxDrag = layouts.length ? pos(layouts[layouts.length - 1]) - pos(layouts[effectiveBase]) : 0
   const targetFromAxis = (axis) => {
-    if (!layouts.length) return activeIndex
-    const current = pos(layouts[activeIndex]) + axis
+    if (!layouts.length) return effectiveBase
+    const current = pos(layouts[effectiveBase]) + axis
     let best = activeIndex
     let distance = Infinity
     layouts.forEach((item, index) => {
@@ -98,6 +101,8 @@ export default function Navigation({ active, onChange, mobile = false }) {
     draggingRef.current = false
     pointerRef.current = true
     startIndexRef.current = index
+    liveIndexRef.current = index
+    setDragBaseIndex(index)
     startRef.current = { x, y }
   }
 
@@ -113,6 +118,12 @@ export default function Navigation({ active, onChange, mobile = false }) {
       draggingRef.current = true
     }
     setDragDx(Math.max(minDrag, Math.min(maxDrag, axis)))
+    const target = targetFromAxis(axis)
+    if (target !== liveIndexRef.current) {
+      liveIndexRef.current = target
+      lastSwipeRef.current = Date.now()
+      onChange(TABS[target].key)
+    }
   }
 
   const endSwipe = (x, y) => {
@@ -121,17 +132,18 @@ export default function Navigation({ active, onChange, mobile = false }) {
     pointerRef.current = null
     draggingRef.current = false
     setDragDx(0)
+    setDragBaseIndex(null)
     if (!wasDragging) return
+    lastSwipeRef.current = Date.now()
     const dx = x - startRef.current.x
     const dy = y - startRef.current.y
     const axis = mobile ? dx : dy
     let target = targetFromAxis(axis)
     if (Math.abs(axis) >= 20) {
-      const step = Math.max(0, Math.min(TABS.length - 1, activeIndex + Math.sign(axis)))
+      const step = Math.max(0, Math.min(TABS.length - 1, startIndexRef.current + Math.sign(axis)))
       target = axis > 0 ? Math.max(target, step) : Math.min(target, step)
     }
-    if (target !== activeIndex) {
-      lastSwipeRef.current = Date.now()
+    if (target !== liveIndexRef.current) {
       onChange(TABS[target].key)
     }
   }
@@ -140,6 +152,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
     pointerRef.current = null
     draggingRef.current = false
     setDragDx(0)
+    setDragBaseIndex(null)
   }
 
   const onTabClick = (key) => {
