@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Send, Sparkles, X } from 'lucide-react'
+import { Send, Sparkles, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import AIRichText from './AIRichText'
+
+const SCREEN_LABELS = {
+  chats: 'Chats',
+  status: 'Status',
+  community: 'Community',
+  calls: 'Calls',
+}
 
 const KNOWLEDGE = [
   {
@@ -565,8 +573,6 @@ const ALL_FEATURES = `Poori ChatWave — ek-ek karke (default 1 se 55 tak topics
 
 Koi bhi upar wale topic ka naam likho — detail se bataunga. "Aur" likhkar pehle jawab ka extended version milta hai.`
 
-const QUICK = ['Features', 'Settings', 'Wallpaper', 'Groups', 'Calls', 'Pinned', 'Multi-select', 'Shortcuts']
-
 const pick = (items) => items[Math.floor(Math.random() * items.length)]
 
 const smallTalk = (query) => {
@@ -650,7 +656,7 @@ const greeting = () => {
   return 'Good evening'
 }
 
-export default function HelpAIModal({ onClose }) {
+export default function HelpAIModal({ onClose, screen, detail }) {
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
@@ -662,6 +668,10 @@ export default function HelpAIModal({ onClose }) {
   const [typing, setTyping] = useState(false)
   const [liveMode, setLiveMode] = useState(null)
   const [lastTopic, setLastTopic] = useState(null)
+  const [suggestions, setSuggestions] = useState([])
+  const [feedback, setFeedback] = useState({})
+  const [streamingId, setStreamingId] = useState(null)
+  const streamTimer = useRef(null)
   const endRef = useRef(null)
 
   useEffect(() => {
@@ -673,39 +683,81 @@ export default function HelpAIModal({ onClose }) {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      if (streamTimer.current) window.clearInterval(streamTimer.current)
+    }
   }, [onClose])
+
+  const streamReply = (reply) => {
+    const id = `a-${Date.now()}`
+    setMessages((prev) => [...prev, { id, from: 'bot', text: '' }])
+    setTyping(false)
+    setStreamingId(id)
+    let index = 0
+    if (streamTimer.current) window.clearInterval(streamTimer.current)
+    streamTimer.current = window.setInterval(() => {
+      index = Math.min(reply.length, index + 5)
+      const slice = reply.slice(0, index)
+      setMessages((prev) => prev.map((item) => (item.id === id ? { ...item, text: slice } : item)))
+      if (index >= reply.length) {
+        window.clearInterval(streamTimer.current)
+        streamTimer.current = null
+        setStreamingId(null)
+      }
+    }, 14)
+  }
+
+  const splitSuggestions = (reply) => {
+    const match = reply.match(/\n?SUGGEST:\s*(.+)$/i)
+    if (!match) return { text: reply.trim(), chips: [] }
+    const chips = match[1]
+      .split('|')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+    return { text: reply.slice(0, match.index).trim(), chips }
+  }
 
   const ask = async (text) => {
     const question = text.trim()
-    if (!question || typing) return
+    if (!question || typing || streamingId) return
     const history = messages
-      .filter((item) => item.id !== 'welcome')
+      .filter((item) => item.id !== 'welcome' && item.text)
       .slice(-12)
       .map((item) => ({ role: item.from === 'me' ? 'user' : 'assistant', content: item.text }))
     setMessages((prev) => [...prev, { id: `q-${Date.now()}`, from: 'me', text: question }])
     setInput('')
+    setSuggestions([])
     setTyping(true)
-    const finish = (reply) => {
-      setMessages((prev) => [...prev, { id: `a-${Date.now()}`, from: 'bot', text: reply }])
-      setTyping(false)
-    }
     try {
       const response = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...history, { role: 'user', content: question }] }),
+        body: JSON.stringify({
+          messages: [...history, { role: 'user', content: question }],
+          screen,
+          detail,
+        }),
       })
       if (!response.ok) throw new Error('AI unavailable')
       const data = await response.json()
       if (!data.reply) throw new Error('Empty reply')
       setLiveMode(true)
-      finish(data.reply)
+      const parsed = splitSuggestions(data.reply)
+      setSuggestions(parsed.chips)
+      streamReply(parsed.text)
     } catch {
       setLiveMode(false)
       const result = replyFor(question, lastTopic)
-      if (result.topic && typeof result.topic === 'object') setLastTopic(result.topic)
-      window.setTimeout(() => finish(result.text), 380)
+      const topic = result.topic && typeof result.topic === 'object' ? result.topic : null
+      if (topic) setLastTopic(topic)
+      const chips = (topic?.related || [])
+        .map((id) => KNOWLEDGE.find((item) => item.id === id)?.keys[0])
+        .filter(Boolean)
+        .slice(0, 3)
+      setSuggestions(chips)
+      window.setTimeout(() => streamReply(result.text), 380)
     }
   }
 
@@ -742,6 +794,12 @@ export default function HelpAIModal({ onClose }) {
                   ? 'Offline guide · Everything about ChatWave'
                   : 'Ask Anything About ChatWave App'}
             </p>
+            {(screen || detail) && (
+              <p className="mt-0.5 truncate text-[10px] text-wa-muted">
+                {SCREEN_LABELS[screen] || screen || 'App'}
+                {detail ? ` · ${detail}` : ''}
+              </p>
+            )}
           </div>
           <button type="button" onClick={onClose} className="icon-btn" aria-label="Close AI help">
             <X size={17} />
@@ -754,15 +812,48 @@ export default function HelpAIModal({ onClose }) {
               key={message.id}
               className={`flex ${message.from === 'me' ? 'justify-end' : 'justify-start'}`}
             >
-              <p
-                className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[12.5px] leading-relaxed ${
+              <div
+                className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 ${
                   message.from === 'me'
                     ? 'rounded-br-md bg-wa-green/20 text-wa-text'
                     : 'rounded-bl-md border border-white/[0.06] bg-white/[0.04] text-wa-text'
                 }`}
               >
-                {message.text}
-              </p>
+                {message.from === 'me' ? (
+                  <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed">{message.text}</p>
+                ) : (
+                  <>
+                    <AIRichText text={message.text} />
+                    {message.id !== 'welcome' && !streamingId && !typing && (
+                      <div className="mt-1.5 flex items-center gap-2 border-t border-white/[0.06] pt-1.5">
+                        <button
+                          type="button"
+                          aria-label="Good answer"
+                          onClick={() => setFeedback((prev) => ({ ...prev, [message.id]: 'up' }))}
+                          className={`rounded-md p-1 transition-colors hover:bg-white/10 ${
+                            feedback[message.id] === 'up' ? 'text-wa-green' : 'text-wa-muted'
+                          }`}
+                        >
+                          <ThumbsUp size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Bad answer"
+                          onClick={() => setFeedback((prev) => ({ ...prev, [message.id]: 'down' }))}
+                          className={`rounded-md p-1 transition-colors hover:bg-white/10 ${
+                            feedback[message.id] === 'down' ? 'text-red-400' : 'text-wa-muted'
+                          }`}
+                        >
+                          <ThumbsDown size={12} />
+                        </button>
+                        {feedback[message.id] && (
+                          <span className="text-[10px] text-wa-green">Thanks for the feedback!</span>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           ))}
           {typing && (
@@ -774,18 +865,21 @@ export default function HelpAIModal({ onClose }) {
               </span>
             </div>
           )}
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {QUICK.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => ask(item)}
-                className="rounded-full border border-wa-green/25 bg-wa-green/[0.07] px-2.5 py-1.5 text-[11px] text-wa-green transition-colors hover:bg-wa-green/15"
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+          {suggestions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] text-wa-muted">Ask next:</span>
+              {suggestions.map((item, index) => (
+                <button
+                  key={`${item}-${index}`}
+                  type="button"
+                  onClick={() => ask(item)}
+                  className="rounded-full border border-wa-green/25 bg-wa-green/[0.07] px-2.5 py-1.5 text-[11px] text-wa-green transition-colors hover:bg-wa-green/15"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          )}
           {related.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               <span className="text-[10px] text-wa-muted">Related:</span>
@@ -823,7 +917,7 @@ export default function HelpAIModal({ onClose }) {
           />
           <button
             type="submit"
-            disabled={!input.trim() || typing}
+            disabled={!input.trim() || typing || !!streamingId}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-wa-green text-white transition-transform hover:scale-105 disabled:opacity-40"
             aria-label="Send question"
           >

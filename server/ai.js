@@ -24,7 +24,11 @@ export async function handleAI({ method, body }) {
 
   const guard =
     'Use the ChatWave context below for app questions. For every other topic, answer normally and helpfully in friendly Hinglish — never refuse and never say the topic is unsupported. ChatWave definitely HAS wallpapers (chat ⋮ → Chat wallpaper: 11 presets + My Photo upload), groups, calls, filters, pinned messages, multi-select and all the listed settings. Never claim a listed feature is missing.'
-  const context = `${guard}\n\n${AI_CONTEXT}\n\n${guard}`
+  const screen = typeof payload.screen === 'string' ? payload.screen.slice(0, 60) : ''
+  const screenNote = screen
+    ? `The user is currently viewing the "${screen}" screen of the app. When relevant, tailor examples and help to that screen.`
+    : ''
+  const context = `${guard}\n\n${screenNote}\n\n${AI_CONTEXT}\n\n${guard}`
   const conversation = messages.map((item, index) =>
     index === messages.length - 1 && item.role === 'user'
       ? { ...item, content: `${item.content}\n\n(Use the ChatWave context when relevant, otherwise answer normally.)` }
@@ -42,7 +46,7 @@ export async function handleAI({ method, body }) {
         model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
         messages: [{ role: 'system', content: context }, ...conversation],
         temperature: 0.2,
-        max_tokens: 420,
+        max_tokens: 800,
       }),
     })
     const data = await response.json()

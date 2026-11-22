@@ -880,7 +880,13 @@ function ChatApp() {
           <Sparkles size={19} />
         </button>
       )}
-      {helpOpen && <HelpAIModal onClose={() => setHelpOpen(false)} />}
+      {helpOpen && (
+        <HelpAIModal
+          onClose={() => setHelpOpen(false)}
+          screen={activeTab}
+          detail={activeChat?.name ? `Open chat: ${activeChat.name}` : ''}
+        />
+      )}
       {mobileNavVisible && <Navigation mobile active={activeTab} onChange={setActiveTab} />}
       {forwarding && (
         <ForwardModal
