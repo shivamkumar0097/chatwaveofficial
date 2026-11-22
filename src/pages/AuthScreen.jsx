@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, AtSign, Check, Eye, EyeOff, Loader2, Lock, Mail, Moon, ShieldCheck, Sun, User, Users, X, Zap } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -195,6 +195,49 @@ export default function AuthScreen() {
     setStep(0)
     setError('')
     setNotice('')
+  }
+
+  const tabSwipe = useRef(null)
+  const tabRef = useRef(null)
+  const tabLastSwipe = useRef(0)
+  const [tabDragX, setTabDragX] = useState(0)
+
+  const onTabSwipeStart = (event) => {
+    tabSwipe.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId, captured: false }
+  }
+  const onTabSwipeMove = (event) => {
+    const start = tabSwipe.current
+    if (!start) return
+    const dx = event.clientX - start.x
+    const dy = event.clientY - start.y
+    if (!start.captured && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+      tabRef.current?.setPointerCapture?.(start.pointerId)
+      start.captured = true
+    }
+    if (Math.abs(dx) < Math.abs(dy)) return
+    const half = (tabRef.current?.getBoundingClientRect().width || 200) / 2 - 8
+    const limited = isSignup ? Math.min(0, Math.max(-half, dx)) : Math.max(0, Math.min(half, dx))
+    setTabDragX(limited)
+  }
+  const onTabSwipeEnd = (event) => {
+    const start = tabSwipe.current
+    tabSwipe.current = null
+    setTabDragX(0)
+    if (!start) return
+    const dx = event.clientX - start.x
+    const dy = event.clientY - start.y
+    if (Math.abs(dx) < 35 || Math.abs(dx) < Math.abs(dy) * 1.2) return
+    if (dx > 0 && !isSignup) {
+      tabLastSwipe.current = Date.now()
+      switchMode('signup')
+    } else if (dx < 0 && isSignup) {
+      tabLastSwipe.current = Date.now()
+      switchMode('signin')
+    }
+  }
+  const onTabClick = (next) => {
+    if (Date.now() - tabLastSwipe.current < 400) return
+    switchMode(next)
   }
 
   const strength = (() => {
@@ -457,15 +500,23 @@ export default function AuthScreen() {
                   </button>
                 </div>
 
-                <div className="relative mb-5 grid grid-cols-2 gap-1 rounded-xl border border-white/[0.06] bg-black/30 p-1 text-[13px]">
+                <div
+                  ref={tabRef}
+                  onPointerDown={onTabSwipeStart}
+                  onPointerMove={onTabSwipeMove}
+                  onPointerUp={onTabSwipeEnd}
+                  onPointerCancel={() => { tabSwipe.current = null; setTabDragX(0) }}
+                  className="relative mb-5 grid cursor-grab touch-pan-y grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/[0.06] bg-black/30 p-1 text-[13px] select-none active:cursor-grabbing"
+                >
                   <span
-                    className={`absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] rounded-lg bg-white/[0.09] shadow-[0_0_0_1px_rgba(124,92,255,0.22),0_6px_18px_-8px_rgba(124,92,255,0.7)] transition-transform duration-300 ${
-                      isSignup ? 'translate-x-full' : 'translate-x-0'
+                    className={`absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] rounded-lg bg-white/[0.09] shadow-[0_0_0_1px_rgba(124,92,255,0.22),0_6px_18px_-8px_rgba(124,92,255,0.7)] ${
+                      tabSwipe.current ? '' : 'transition-transform duration-300'
                     }`}
+                    style={{ transform: `translateX(${isSignup ? '100%' : '0px'}) translateX(${tabDragX}px)` }}
                   />
                   <button
                     type="button"
-                    onClick={() => switchMode('signin')}
+                    onClick={() => onTabClick('signin')}
                     aria-pressed={!isSignup}
                     className={`relative z-10 rounded-lg py-2 font-medium transition-colors duration-200 ${
                       !isSignup ? 'text-white' : 'text-wa-muted hover:text-wa-text'
@@ -475,7 +526,7 @@ export default function AuthScreen() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => switchMode('signup')}
+                    onClick={() => onTabClick('signup')}
                     aria-pressed={isSignup}
                     className={`relative z-10 rounded-lg py-2 font-medium transition-colors duration-200 ${
                       isSignup ? 'text-white' : 'text-wa-muted hover:text-wa-text'

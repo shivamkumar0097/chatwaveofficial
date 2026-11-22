@@ -42,13 +42,13 @@ export function TabPlaceholder({ tab }) {
 export default function Navigation({ active, onChange, mobile = false }) {
   const navRef = useRef(null)
   const itemRefs = useRef([])
-  const timerRef = useRef(null)
   const draggingRef = useRef(false)
-  const suppressClickRef = useRef(false)
+  const pointerRef = useRef(null)
+  const lastSwipeRef = useRef(0)
   const startRef = useRef({ x: 0, y: 0 })
-  const dragStartRef = useRef(0)
   const [layouts, setLayouts] = useState([])
   const [dragIndex, setDragIndex] = useState(null)
+  const [dragDx, setDragDx] = useState(0)
   const activeIndex = Math.max(0, TABS.findIndex((tab) => tab.key === active))
 
   useLayoutEffect(() => {
@@ -94,45 +94,56 @@ export default function Navigation({ active, onChange, mobile = false }) {
     return best
   }
 
-  const pointerDown = (event, index) => {
+  const pointerDown = (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {}
     draggingRef.current = false
-    dragStartRef.current = index
+    pointerRef.current = event.pointerId
     startRef.current = { x: event.clientX, y: event.clientY }
-    timerRef.current = window.setTimeout(() => {
-      draggingRef.current = true
-      setDragIndex(index)
-    }, 220)
   }
 
   const pointerMove = (event) => {
+    if (!pointerRef.current) return
+    const dx = event.clientX - startRef.current.x
+    const dy = event.clientY - startRef.current.y
+    const axis = mobile ? dx : dy
+    const cross = mobile ? dy : dx
     if (!draggingRef.current) {
-      const dx = event.clientX - startRef.current.x
-      const dy = event.clientY - startRef.current.y
-      if (Math.hypot(dx, dy) < 10) return
-      if (timerRef.current) window.clearTimeout(timerRef.current)
+      if (Math.hypot(dx, dy) < 8) return
+      if (Math.abs(axis) < Math.abs(cross)) return
       draggingRef.current = true
-      setDragIndex(dragStartRef.current)
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {}
     }
+    setDragDx(axis)
     setDragIndex(nearestIndex(event.clientX, event.clientY))
   }
 
   const pointerUp = (event, commit = true) => {
-    if (timerRef.current) window.clearTimeout(timerRef.current)
-    if (!draggingRef.current) return
+    if (!pointerRef.current) return
+    const wasDragging = draggingRef.current
+    pointerRef.current = null
     draggingRef.current = false
+    setDragDx(0)
+    if (!wasDragging) return
     const target = nearestIndex(event.clientX, event.clientY)
     setDragIndex(null)
-    if (commit) {
-      suppressClickRef.current = true
+    if (commit && target !== activeIndex) {
+      lastSwipeRef.current = Date.now()
       onChange(TABS[target].key)
-      window.setTimeout(() => {
-        suppressClickRef.current = false
-      }, 0)
     }
+  }
+
+  const pointerCancel = () => {
+    pointerRef.current = null
+    draggingRef.current = false
+    setDragDx(0)
+    setDragIndex(null)
+  }
+
+  const onTabClick = (key) => {
+    if (Date.now() - lastSwipeRef.current < 400) return
+    onChange(key)
   }
 
   const baseClass = 'relative z-10 touch-none'
@@ -145,7 +156,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
       style={{
         width: pill.width,
         height: pill.height,
-        transform: `translate3d(${pill.left}px, ${pill.top}px, 0)`,
+        transform: `translate3d(${pill.left + (mobile ? dragDx : 0)}px, ${pill.top + (mobile ? 0 : dragDx)}px, 0)`,
       }}
     />
   )
@@ -166,14 +177,11 @@ export default function Navigation({ active, onChange, mobile = false }) {
                 itemRefs.current[index] = node
               }}
               type="button"
-              onPointerDown={(event) => pointerDown(event, index)}
+              onPointerDown={pointerDown}
               onPointerMove={pointerMove}
               onPointerUp={pointerUp}
-              onPointerCancel={(event) => pointerUp(event, false)}
-              onClick={() => {
-                if (suppressClickRef.current) return
-                onChange(tab.key)
-              }}
+              onPointerCancel={pointerCancel}
+              onClick={() => onTabClick(tab.key)}
               className={`${baseClass} flex min-w-16 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition-colors duration-300 ${
                 activeTab ? 'text-wa-green' : 'text-wa-muted'
               }`}
@@ -208,14 +216,11 @@ export default function Navigation({ active, onChange, mobile = false }) {
               itemRefs.current[index] = node
             }}
             type="button"
-            onPointerDown={(event) => pointerDown(event, index)}
+            onPointerDown={pointerDown}
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}
-            onPointerCancel={(event) => pointerUp(event, false)}
-            onClick={() => {
-              if (suppressClickRef.current) return
-              onChange(tab.key)
-            }}
+            onPointerCancel={pointerCancel}
+            onClick={() => onTabClick(tab.key)}
             title={tab.label}
             aria-label={tab.label}
             className={`${baseClass} flex w-16 flex-col items-center gap-1 rounded-2xl py-2.5 transition-colors duration-300 ${

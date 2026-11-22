@@ -42,14 +42,16 @@ export default function InstallPrompt() {
   if (dismissed || keyboard) return null
 
   const install = async () => {
-    if (!prompt) {
+    const deferred = prompt || window.cwInstallPrompt
+    if (!deferred) {
       setHelp(true)
       return
     }
-    prompt.prompt()
-    await prompt.userChoice
+    deferred.prompt()
+    await deferred.userChoice
     setPrompt(null)
     window.cwInstallPrompt = null
+    setDismissed(true)
   }
 
   return (
