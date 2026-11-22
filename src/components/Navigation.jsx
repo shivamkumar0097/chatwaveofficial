@@ -47,9 +47,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
   const lastSwipeRef = useRef(0)
   const startRef = useRef({ x: 0, y: 0 })
   const startIndexRef = useRef(0)
-  const lastPointRef = useRef({ x: 0, y: 0 })
   const [layouts, setLayouts] = useState([])
-  const [dragIndex, setDragIndex] = useState(null)
   const [dragDx, setDragDx] = useState(0)
   const activeIndex = Math.max(0, TABS.findIndex((tab) => tab.key === active))
 
@@ -76,18 +74,18 @@ export default function Navigation({ active, onChange, mobile = false }) {
     return () => observer.disconnect()
   }, [mobile])
 
-  const displayIndex = dragIndex ?? activeIndex
-  const pill = layouts[displayIndex]
-
-  const nearestIndex = (clientX, clientY) => {
-    let best = 0
+  const pill = layouts[activeIndex]
+  const pos = (item) => (mobile ? item?.left || 0 : item?.top || 0)
+  const minDrag = layouts.length ? pos(layouts[0]) - pos(layouts[activeIndex]) : 0
+  const maxDrag = layouts.length ? pos(layouts[layouts.length - 1]) - pos(layouts[activeIndex]) : 0
+  const targetFromAxis = (axis) => {
+    if (!layouts.length) return activeIndex
+    const current = pos(layouts[activeIndex]) + axis
+    let best = activeIndex
     let distance = Infinity
-    itemRefs.current.forEach((node, index) => {
-      if (!node) return
-      const rect = node.getBoundingClientRect()
-      const dx = clientX - (rect.left + rect.width / 2)
-      const dy = clientY - (rect.top + rect.height / 2)
-      const next = dx * dx + dy * dy
+    layouts.forEach((item, index) => {
+      if (!item) return
+      const next = Math.abs(pos(item) - current)
       if (next < distance) {
         distance = next
         best = index
@@ -101,12 +99,10 @@ export default function Navigation({ active, onChange, mobile = false }) {
     pointerRef.current = true
     startIndexRef.current = index
     startRef.current = { x, y }
-    lastPointRef.current = { x, y }
   }
 
   const moveSwipe = (x, y) => {
     if (!pointerRef.current) return
-    lastPointRef.current = { x, y }
     const dx = x - startRef.current.x
     const dy = y - startRef.current.y
     const axis = mobile ? dx : dy
@@ -116,8 +112,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
       if (Math.abs(axis) < Math.abs(cross)) return
       draggingRef.current = true
     }
-    setDragDx(axis)
-    setDragIndex(nearestIndex(x, y))
+    setDragDx(Math.max(minDrag, Math.min(maxDrag, axis)))
   }
 
   const endSwipe = (x, y) => {
@@ -130,12 +125,11 @@ export default function Navigation({ active, onChange, mobile = false }) {
     const dx = x - startRef.current.x
     const dy = y - startRef.current.y
     const axis = mobile ? dx : dy
-    let target = nearestIndex(x, y)
+    let target = targetFromAxis(axis)
     if (Math.abs(axis) >= 20) {
-      const step = Math.max(0, Math.min(TABS.length - 1, startIndexRef.current + Math.sign(axis)))
+      const step = Math.max(0, Math.min(TABS.length - 1, activeIndex + Math.sign(axis)))
       target = axis > 0 ? Math.max(target, step) : Math.min(target, step)
     }
-    setDragIndex(null)
     if (target !== activeIndex) {
       lastSwipeRef.current = Date.now()
       onChange(TABS[target].key)
@@ -146,7 +140,6 @@ export default function Navigation({ active, onChange, mobile = false }) {
     pointerRef.current = null
     draggingRef.current = false
     setDragDx(0)
-    setDragIndex(null)
   }
 
   const onTabClick = (key) => {
@@ -194,7 +187,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
   const indicator = pill && (
     <span
       className={`pointer-events-none absolute left-0 top-0 z-0 border border-white/15 bg-white/[0.14] shadow-[0_10px_30px_-12px_rgba(124,92,255,0.95)] backdrop-blur-md will-change-transform ease-out ${
-        dragIndex !== null ? 'transition-none' : 'transition-transform duration-200'
+        dragDx !== 0 ? 'transition-none' : 'transition-transform duration-200'
       } ${mobile ? 'rounded-xl' : 'rounded-2xl'}`}
       style={{
         width: pill.width,
@@ -208,11 +201,11 @@ export default function Navigation({ active, onChange, mobile = false }) {
     return (
       <nav
         ref={navRef}
-        className="animate-fade-up fixed inset-x-0 bottom-0 z-40 flex h-16 touch-none items-center justify-around border-t border-wa-border bg-wa-bg/95 backdrop-blur-xl md:hidden"
+        className="animate-fade-up fixed inset-x-0 bottom-0 z-40 flex h-16 touch-none items-center justify-around overflow-hidden border-t border-wa-border bg-wa-bg/95 backdrop-blur-xl md:hidden"
       >
         {indicator}
         {TABS.map((tab, index) => {
-          const activeTab = displayIndex === index
+          const activeTab = activeIndex === index
           return (
             <button
               key={tab.key}
@@ -248,7 +241,7 @@ export default function Navigation({ active, onChange, mobile = false }) {
       </div>
       {indicator}
       {TABS.map((tab, index) => {
-        const activeTab = displayIndex === index
+        const activeTab = activeIndex === index
         return (
           <button
             key={tab.key}

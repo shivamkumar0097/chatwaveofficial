@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, AtSign, Check, Eye, EyeOff, Loader2, Lock, Mail, Moon, ShieldCheck, Sun, User, Users, X, Zap } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -199,9 +199,73 @@ export default function AuthScreen() {
 
   const tabSwipe = useRef(null)
   const tabRef = useRef(null)
+  const tabButtonRefs = useRef([])
   const tabLastSwipe = useRef(0)
   const [tabDragX, setTabDragX] = useState(0)
   const [tabDragging, setTabDragging] = useState(false)
+  const [tabSpacing, setTabSpacing] = useState(0)
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const [first, second] = tabButtonRefs.current
+      if (first && second) setTabSpacing(second.offsetLeft - first.offsetLeft)
+    }
+    measure()
+    const node = tabRef.current
+    if (!node || typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  const tabHandlersRef = useRef(null)
+
+  useEffect(() => {
+    const node = tabRef.current
+    if (!node) return undefined
+    let active = false
+    let startX = 0
+    let startY = 0
+    const onStart = (event) => {
+      const touch = event.touches[0]
+      if (!touch) return
+      active = true
+      startX = touch.clientX
+      startY = touch.clientY
+      tabHandlersRef.current.startTabSwipe(touch.clientX, touch.clientY)
+    }
+    const onMove = (event) => {
+      if (!active) return
+      const touch = event.touches[0]
+      if (!touch) return
+      const dx = touch.clientX - startX
+      const dy = touch.clientY - startY
+      if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+        event.preventDefault()
+        tabHandlersRef.current.moveTabSwipe(touch.clientX, touch.clientY)
+      }
+    }
+    const onEnd = (event) => {
+      if (!active) return
+      active = false
+      const touch = event.changedTouches[0]
+      tabHandlersRef.current.endTabSwipe(touch ? touch.clientX : startX, touch ? touch.clientY : startY)
+    }
+    const onCancel = () => {
+      active = false
+      tabHandlersRef.current.cancelTabSwipe()
+    }
+    node.addEventListener('touchstart', onStart, { passive: true })
+    node.addEventListener('touchmove', onMove, { passive: false })
+    node.addEventListener('touchend', onEnd)
+    node.addEventListener('touchcancel', onCancel)
+    return () => {
+      node.removeEventListener('touchstart', onStart)
+      node.removeEventListener('touchmove', onMove)
+      node.removeEventListener('touchend', onEnd)
+      node.removeEventListener('touchcancel', onCancel)
+    }
+  }, [])
 
   const startTabSwipe = (x, y) => {
     tabSwipe.current = { x, y }
@@ -213,8 +277,8 @@ export default function AuthScreen() {
     const dx = x - start.x
     const dy = y - start.y
     if (Math.abs(dx) < Math.abs(dy)) return
-    const half = (tabRef.current?.getBoundingClientRect().width || 200) / 2 - 8
-    const limited = isSignup ? Math.min(0, Math.max(-half, dx)) : Math.max(0, Math.min(half, dx))
+    const limit = tabSpacing || (tabRef.current?.getBoundingClientRect().width || 200) / 2 - 8
+    const limited = isSignup ? Math.min(0, Math.max(-limit, dx)) : Math.max(0, Math.min(limit, dx))
     setTabDragX(limited)
   }
   const endTabSwipe = (x, y) => {
@@ -225,7 +289,7 @@ export default function AuthScreen() {
     if (!start) return
     const dx = x - start.x
     const dy = y - start.y
-    if (Math.abs(dx) < 22 || Math.abs(dx) < Math.abs(dy) * 1.2) return
+    if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy)) return
     if (dx > 0 && !isSignup) {
       tabLastSwipe.current = Date.now()
       switchMode('signup')
@@ -239,21 +303,33 @@ export default function AuthScreen() {
     setTabDragging(false)
     setTabDragX(0)
   }
+  useEffect(() => {
+    tabHandlersRef.current = { startTabSwipe, moveTabSwipe, endTabSwipe, cancelTabSwipe }
+  })
   const onTabClick = (next) => {
     if (Date.now() - tabLastSwipe.current < 400) return
     switchMode(next)
   }
-  const onTabTouchStart = (event) => {
-    const touch = event.touches[0]
-    if (touch) startTabSwipe(touch.clientX, touch.clientY)
-  }
-  const onTabTouchMove = (event) => {
-    const touch = event.touches[0]
-    if (touch) moveTabSwipe(touch.clientX, touch.clientY)
-  }
-  const onTabTouchEnd = (event) => {
-    const touch = event.changedTouches[0]
-    if (touch) endTabSwipe(touch.clientX, touch.clientY)
+  const tabSwipeHandlers = {
+    onPointerDown: (event) => {
+      if (event.pointerType === 'touch') return
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      startTabSwipe(event.clientX, event.clientY)
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {}
+    },
+    onPointerMove: (event) => {
+      if (event.pointerType === 'touch') return
+      moveTabSwipe(event.clientX, event.clientY)
+    },
+    onPointerUp: (event) => {
+      if (event.pointerType === 'touch') return
+      endTabSwipe(event.clientX, event.clientY)
+    },
+    onPointerCancel: (event) => {
+      if (event.pointerType !== 'touch') cancelTabSwipe()
+    },
   }
 
   const strength = (() => {
@@ -518,37 +594,34 @@ export default function AuthScreen() {
 
                 <div
                   ref={tabRef}
-                  onPointerDown={(event) => { if (event.pointerType !== 'touch') startTabSwipe(event.clientX, event.clientY) }}
-                  onPointerMove={(event) => { if (event.pointerType !== 'touch') moveTabSwipe(event.clientX, event.clientY) }}
-                  onPointerUp={(event) => { if (event.pointerType !== 'touch') endTabSwipe(event.clientX, event.clientY) }}
-                  onPointerCancel={cancelTabSwipe}
-                  onTouchStart={onTabTouchStart}
-                  onTouchMove={onTabTouchMove}
-                  onTouchEnd={onTabTouchEnd}
-                  onTouchCancel={cancelTabSwipe}
-                  className="relative mb-5 grid cursor-grab touch-none grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/[0.06] bg-black/30 p-1 text-[13px] select-none active:cursor-grabbing"
+                  style={{ touchAction: 'none' }}
+                  className="relative mb-5 grid grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/[0.06] bg-black/30 p-1 text-[13px] select-none"
                 >
                   <span
                     className={`absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] rounded-lg bg-white/[0.09] shadow-[0_0_0_1px_rgba(124,92,255,0.22),0_6px_18px_-8px_rgba(124,92,255,0.7)] ${
                       tabDragging ? '' : 'transition-transform duration-300'
                     }`}
-                    style={{ transform: `translateX(${isSignup ? '100%' : '0px'}) translateX(${tabDragX}px)` }}
+                    style={{ transform: `translateX(${isSignup ? tabSpacing : 0}px) translateX(${tabDragX}px)` }}
                   />
                   <button
+                    ref={(node) => { tabButtonRefs.current[0] = node }}
                     type="button"
+                    {...tabSwipeHandlers}
                     onClick={() => onTabClick('signin')}
                     aria-pressed={!isSignup}
-                    className={`relative z-10 rounded-lg py-2 font-medium transition-colors duration-200 ${
+                    className={`relative z-10 touch-none rounded-lg py-2 font-medium transition-colors duration-200 ${
                       !isSignup ? 'text-white' : 'text-wa-muted hover:text-wa-text'
                     }`}
                   >
                     Sign in
                   </button>
                   <button
+                    ref={(node) => { tabButtonRefs.current[1] = node }}
                     type="button"
+                    {...tabSwipeHandlers}
                     onClick={() => onTabClick('signup')}
                     aria-pressed={isSignup}
-                    className={`relative z-10 rounded-lg py-2 font-medium transition-colors duration-200 ${
+                    className={`relative z-10 touch-none rounded-lg py-2 font-medium transition-colors duration-200 ${
                       isSignup ? 'text-white' : 'text-wa-muted hover:text-wa-text'
                     }`}
                   >
