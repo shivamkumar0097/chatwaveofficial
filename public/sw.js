@@ -1,4 +1,4 @@
-const CACHE = 'chatwave-v4'
+const CACHE = 'chatwave-v5'
 const SHELL = ['/', '/index.html', '/logo.jpg', '/icons/icon-192.png', '/icons/icon-512.png']
 
 self.addEventListener('install', (event) => {
@@ -75,6 +75,29 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification.data || {}
   event.notification.close()
   let target = data.url || '/'
+  if (data.callUi === 'restore') {
+    event.waitUntil(
+      self.registration
+        .getNotifications({ tag: 'cw-ongoing-call' })
+        .catch(() => [])
+        .then((list) => list.forEach((item) => item.close()))
+        .then(() => self.clients.matchAll({ type: 'window', includeUncontrolled: true }))
+        .then(async (clients) => {
+          let focused = false
+          for (const client of clients) {
+            try {
+              if (new URL(client.url).origin === self.location.origin) {
+                client.postMessage({ type: 'cw:restore-call' })
+                client.focus()
+                focused = true
+              }
+            } catch {}
+          }
+          if (!focused) return self.clients.openWindow(target)
+        })
+    )
+    return
+  }
   if (action === 'message' && data.chatUrl) {
     target = data.chatUrl
   } else if (action === 'callback' && target.includes('missed=')) {

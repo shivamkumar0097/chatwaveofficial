@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Archive,
@@ -37,6 +37,14 @@ export default function ChatContextMenu({
 }) {
   const [confirmClear, setConfirmClear] = useState(false)
 
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const options = [
     {
       key: 'read',
@@ -62,15 +70,19 @@ export default function ChatContextMenu({
       icon: muted ? Bell : BellOff,
       action: onToggleMute,
     },
-    { key: 'profile', label: 'View profile', icon: UserRound, action: onViewProfile },
-    {
-      key: 'block',
-      label: blocked ? 'Unblock contact' : 'Block contact',
-      icon: blocked ? ShieldCheck : ShieldOff,
-      action: onToggleBlock,
-      danger: !blocked,
-    },
-    { key: 'copy', label: 'Copy username', icon: Copy, action: onCopyUsername },
+    ...(chat.isGroup
+      ? []
+      : [
+          { key: 'profile', label: 'View profile', icon: UserRound, action: onViewProfile },
+          {
+            key: 'block',
+            label: blocked ? 'Unblock contact' : 'Block contact',
+            icon: blocked ? ShieldCheck : ShieldOff,
+            action: onToggleBlock,
+            danger: !blocked,
+          },
+          { key: 'copy', label: 'Copy username', icon: Copy, action: onCopyUsername },
+        ]),
     { key: 'clear', label: 'Clear chat', icon: Trash2, action: onClearChat, danger: true },
   ]
 

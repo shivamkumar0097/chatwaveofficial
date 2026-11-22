@@ -113,6 +113,7 @@ export default function ProfileModal({
   lockEnabled = false,
   onToggleLock,
   onClose,
+  onOpenHelp,
   onSaved,
   onNotice,
   onError,
@@ -204,78 +205,79 @@ export default function ProfileModal({
       return
     }
 
-    onClose?.()
-    onNotice?.('Profile updated successfully')
+    try {
+      if (handle && supabase) {
+        const { data: taken } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', handle)
+          .neq('id', user.id)
+          .limit(1)
+        if (taken?.length) {
+          onError?.('That username is already taken.')
+          return
+        }
+      }
 
-    if (handle && supabase) {
-      const { data: taken } = await supabase
+      let nextAvatarUrl = removed ? null : currentAvatarUrl || null
+      const file = fileRef.current?.files?.[0]
+
+      if (file) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+        const path = `${user.id}/avatar-${Date.now()}.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(path, file, { contentType: file.type, upsert: true })
+
+        if (uploadError) {
+          onError?.(uploadError.message)
+          return
+        }
+
+        nextAvatarUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
+      }
+
+      const payload = {
+        name: name.trim() || currentName,
+        username: handle || null,
+        avatar_url: nextAvatarUrl,
+        avatar_color: color,
+        bio: bio.trim(),
+      }
+
+      let { error: updateError } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('username', handle)
-        .neq('id', user.id)
-        .limit(1)
-      if (taken?.length) {
-        setBusy(false)
-        onError?.('That username is already taken.')
-        return
-      }
-    }
+        .update(payload)
+        .eq('id', user.id)
 
-    let nextAvatarUrl = removed ? null : currentAvatarUrl || null
-    const file = fileRef.current?.files?.[0]
-
-    if (file) {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
-      const path = `${user.id}/avatar-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(path, file, { contentType: file.type, upsert: true })
-
-      if (uploadError) {
-        setBusy(false)
-        onError?.(uploadError.message)
-        return
+      if (updateError) {
+        // bio column not migrated yet (schema7.sql not applied) — save the rest
+        const legacy = {
+          name: payload.name,
+          avatar_url: payload.avatar_url,
+          avatar_color: payload.avatar_color,
+        }
+        const retry = await supabase.from('profiles').update(legacy).eq('id', user.id)
+        if (retry.error) {
+          onError?.(retry.error.message)
+          return
+        }
+        setNote('Some profile fields were not saved — run the latest schema migrations.')
       }
 
-      nextAvatarUrl = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl
+      setSaved(true)
+      setPreview(nextAvatarUrl || '')
+      setUsername(handle)
+      setRemoved(false)
+      if (fileRef.current) fileRef.current.value = ''
+      await onSaved?.()
+      onClose?.()
+      onNotice?.('Profile updated successfully')
+    } catch (error) {
+      onError?.(error?.message || 'Could not save profile.')
+    } finally {
+      setBusy(false)
     }
-
-    const payload = {
-      name: name.trim() || currentName,
-      username: handle || null,
-      avatar_url: nextAvatarUrl,
-      avatar_color: color,
-      bio: bio.trim(),
-    }
-
-    let { error: updateError } = await supabase
-      .from('profiles')
-      .update(payload)
-      .eq('id', user.id)
-
-    if (updateError) {
-      // bio column not migrated yet (schema7.sql not applied) — save the rest
-      const legacy = {
-        name: payload.name,
-        avatar_url: payload.avatar_url,
-        avatar_color: payload.avatar_color,
-      }
-      const retry = await supabase.from('profiles').update(legacy).eq('id', user.id)
-      if (retry.error) {
-        setBusy(false)
-        onError?.(retry.error.message)
-        return
-      }
-      setNote('Some profile fields were not saved — run the latest schema migrations.')
-    }
-
-    setBusy(false)
-    setSaved(true)
-    setPreview(nextAvatarUrl || '')
-    setUsername(handle)
-    setRemoved(false)
-    if (fileRef.current) fileRef.current.value = ''
-    await onSaved?.()
   }
 
   const togglePush = async () => {
@@ -686,6 +688,24 @@ export default function ProfileModal({
                   value={reduceMotion}
                   onToggle={toggleReduceMotion}
                 />
+                {onOpenHelp && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                      onOpenHelp()
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/[0.05]"
+                  >
+                    <Sparkles size={16} className="text-wa-green" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[12.5px] font-medium text-wa-text">Help & AI</span>
+                      <span className="block text-[10.5px] text-wa-muted">
+                        Ask anything about ChatWave
+                      </span>
+                    </span>
+                  </button>
+                )}
               </div>
 
               <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3">

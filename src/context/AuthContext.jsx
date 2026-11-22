@@ -5,32 +5,49 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
+  const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(isSupabaseConfigured)
 
   useEffect(() => {
     if (!supabase) return undefined
 
+    const applySession = (nextSession) => {
+      setSession(nextSession)
+      const nextUser = nextSession?.user ?? null
+      setUser((prev) => ((prev?.id ?? null) === (nextUser?.id ?? null) ? prev : nextUser))
+    }
+
     supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
+      applySession(data.session)
       setLoading(false)
     })
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession)
+      applySession(nextSession)
     })
 
     return () => listener.subscription.unsubscribe()
   }, [])
 
   const signIn = (email, password) =>
-    supabase.auth.signInWithPassword({ email, password })
+    supabase
+      ? supabase.auth.signInWithPassword({ email, password })
+      : Promise.resolve({
+          data: { session: null, user: null },
+          error: new Error('Authentication is not configured'),
+        })
 
   const signUp = (email, password, name, username) =>
-    supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name, username } },
-    })
+    supabase
+      ? supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { full_name: name, username } },
+        })
+      : Promise.resolve({
+          data: { session: null, user: null },
+          error: new Error('Authentication is not configured'),
+        })
 
   const signOut = async () => {
     if (supabase && session?.user) {
@@ -44,7 +61,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, loading, signIn, signUp, signOut }}
+      value={{ session, user, loading, signIn, signUp, signOut }}
     >
       {children}
     </AuthContext.Provider>

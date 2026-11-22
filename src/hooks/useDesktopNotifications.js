@@ -38,7 +38,7 @@ export function useDesktopNotifications() {
     }
 
     const handler = async (event) => {
-      if (window.localStorage.getItem('cw-desktop-notifications') !== '1') return
+      if (window.localStorage.getItem('cw-desktop-notifications') === '0') return
       if (Notification.permission === 'default') {
         try {
           await Notification.requestPermission()

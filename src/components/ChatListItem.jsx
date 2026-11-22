@@ -3,7 +3,7 @@ import { CheckCheck, Check, Pin, Users } from 'lucide-react'
 import Avatar from '@/components/Avatar'
 import EmojiText from '@/components/EmojiText'
 
-export default function ChatListItem({ chat, active, pinned = false, onSelect, onLongPress }) {
+export default function ChatListItem({ chat, active, pinned = false, onSelect, onLongPress, onAvatarClick }) {
   const last = chat.messages[chat.messages.length - 1]
   const timerRef = useRef(null)
   const longPressedRef = useRef(false)
@@ -48,13 +48,27 @@ export default function ChatListItem({ chat, active, pinned = false, onSelect, o
         <span className="absolute left-0 top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-wa-green to-accent-2" />
       )}
 
-      <Avatar
-        name={chat.name}
-        color={chat.avatarColor}
-        src={chat.avatarUrl}
-        size="lg"
-        online={chat.online}
-      />
+      <span
+        aria-label={`Open ${chat.name}'s contact actions`}
+        className="shrink-0 cursor-pointer rounded-full transition-transform hover:scale-105 active:scale-95"
+        onPointerDown={(event) => event.stopPropagation()}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        onClick={(event) => {
+          event.stopPropagation()
+          onAvatarClick?.(chat)
+        }}
+      >
+        <Avatar
+          name={chat.name}
+          color={chat.avatarColor}
+          src={chat.avatarUrl}
+          size="lg"
+          online={chat.online}
+        />
+      </span>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">

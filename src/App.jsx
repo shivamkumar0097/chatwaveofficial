@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { Check, Forward as ForwardIcon, ImagePlus, Loader2, Send, X } from 'lucide-react'
+import { Check, Forward as ForwardIcon, ImagePlus, Loader2, Send, Sparkles, X } from 'lucide-react'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { useChats } from '@/hooks/useChats'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
@@ -18,7 +18,10 @@ import CallsPanel from '@/components/CallsPanel'
 import CommunityPanel from '@/components/CommunityPanel'
 import StatusPanel from '@/components/StatusPanel'
 import ContactCard from '@/components/ContactCard'
+import ContactActionsModal from '@/components/ContactActionsModal'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import GroupMembersModal from '@/components/GroupMembersModal'
+import HelpAIModal from '@/components/HelpAIModal'
 import ChatWindow from '@/components/ChatWindow'
 import NewChatModal from '@/components/NewChatModal'
 import Navigation, { TabPlaceholder } from '@/components/Navigation'
@@ -116,6 +119,15 @@ function ChatApp() {
     remoteStream,
     facingMode,
     remoteFacingMode,
+    videoFilter,
+    remoteFilter,
+    screenSharing,
+    minimized,
+    minimizeCall,
+    restoreCall,
+    startScreenShare,
+    stopScreenShare,
+    applyVideoFilter,
     notice,
     startCall,
     acceptCall,
@@ -141,7 +153,10 @@ function ChatApp() {
   const [newGroupOpen, setNewGroupOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('chats')
   const [contactCard, setContactCard] = useState(null)
+  const [quickChat, setQuickChat] = useState(null)
+  const [quickMembersId, setQuickMembersId] = useState(null)
   const [scannerOpen, setScannerOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [profileTab, setProfileTab] = useState('profile')
   const [uploading, setUploading] = useState(false)
@@ -219,6 +234,9 @@ function ChatApp() {
       newGroupOpen ||
       Boolean(forwarding) ||
       Boolean(contactCard) ||
+      Boolean(quickChat) ||
+      Boolean(quickMembersId) ||
+      helpOpen ||
       scannerOpen
     if (away && !awayFromHomeRef.current) {
       window.history.pushState({ chatwave: 'away' }, '')
@@ -226,7 +244,7 @@ function ChatApp() {
     } else if (!away) {
       awayFromHomeRef.current = false
     }
-  }, [activeTab, mobileChatOpen, profileOpen, newChatOpen, newGroupOpen, forwarding, contactCard, scannerOpen])
+  }, [activeTab, mobileChatOpen, profileOpen, newChatOpen, newGroupOpen, forwarding, contactCard, quickChat, quickMembersId, helpOpen, scannerOpen])
 
   useEffect(() => {
     const goHome = () => {
@@ -238,6 +256,9 @@ function ChatApp() {
       setNewGroupOpen(false)
       setForwarding(null)
       setContactCard(null)
+      setQuickChat(null)
+      setQuickMembersId(null)
+      setHelpOpen(false)
       setScannerOpen(false)
       awayFromHomeRef.current = false
     }
@@ -327,6 +348,15 @@ function ChatApp() {
     document.title = totalUnread ? `(${totalUnread}) ChatWave` : 'ChatWave'
   }, [totalUnread])
 
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return undefined
+    const onMessage = (event) => {
+      if (event.data?.type === 'cw:restore-call') restoreCall()
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [restoreCall])
+
   const openProfile = (tab = 'profile') => {
     setProfileTab(tab)
     setProfileOpen(true)
@@ -380,25 +410,27 @@ function ChatApp() {
   const activeChat = chatsWithPresence.find((chat) => chat.id === activeId)
   const mobileNavVisible = activeTab !== 'chats' || !mobileChatOpen
 
-  const handleCall = ({ withVideo = false } = {}) => {
-    if (!activeChat || activeChat.isGroup) return
-    if (isBlocked(otherIdOf(activeChat))) {
+  const startCallFor = (chat, withVideo = false) => {
+    if (!chat || chat.isGroup) return
+    if (isBlocked(otherIdOf(chat))) {
       showToast('You blocked this contact.')
       return
     }
-    const peerId = activeChat.memberIds.find((id) => id !== user.id)
+    const peerId = chat.memberIds.find((id) => id !== user.id)
     if (!peerId) return
     startCall({
-      conversationId: activeChat.id,
+      conversationId: chat.id,
       peerId,
-      peerName: activeChat.name,
-      peerAvatar: activeChat.avatarUrl,
-      peerColor: activeChat.avatarColor,
+      peerName: chat.name,
+      peerAvatar: chat.avatarUrl,
+      peerColor: chat.avatarColor,
       selfAvatar: me.avatarUrl,
       selfColor: me.color,
       withVideo,
     })
   }
+
+  const handleCall = ({ withVideo = false } = {}) => startCallFor(activeChat, withVideo)
 
   const handleSelect = (id) => {
     const target = chatsWithPresence.find((chat) => chat.id === id)
@@ -411,6 +443,28 @@ function ChatApp() {
     setActiveId(id)
     markRead(id)
     setMobileChatOpen(true)
+  }
+
+  const handleQuickChat = (chat) => {
+    setQuickChat(null)
+    handleSelect(chat.id)
+  }
+
+  const handleQuickCall = (chat, withVideo) => {
+    setQuickChat(null)
+    startCallFor(chat, withVideo)
+  }
+
+  const handleQuickInfo = (chat) => {
+    setQuickChat(null)
+    if (!chat.isGroup) {
+      setContactCard({ ...chat, userId: user.id })
+      return
+    }
+    setActiveId(chat.id)
+    markRead(chat.id)
+    setMobileChatOpen(true)
+    setQuickMembersId(chat.id)
   }
 
   const handleSend = async (text, options) => {
@@ -531,19 +585,27 @@ function ChatApp() {
       showToast('Could not forward the message.')
       return
     }
-    const { error } = await sendMessage(id, message.text || '', message.imageUrl || null, {
-      forwarded: true,
-      fileUrl: message.fileUrl,
-      fileName: message.fileName,
-      fileType: message.fileType,
-      fileSize: message.fileSize,
-      timer: chatsWithPresence.find((chat) => chat.id === id)?.disappearingTimer,
-    })
-    if (error) {
+    const messages = message.bulk?.length ? message.bulk : [message]
+    let failed = false
+    for (const item of messages) {
+      const { error } = await sendMessage(id, item.text || '', item.imageUrl || null, {
+        forwarded: true,
+        fileUrl: item.fileUrl,
+        fileName: item.fileName,
+        fileType: item.fileType,
+        fileSize: item.fileSize,
+        timer: chatsWithPresence.find((chat) => chat.id === id)?.disappearingTimer,
+      })
+      if (error) {
+        failed = true
+        break
+      }
+    }
+    if (failed) {
       showToast('Could not forward the message.')
       return
     }
-    showToast('Message forwarded ✓')
+    showToast(messages.length > 1 ? `${messages.length} messages forwarded ✓` : 'Message forwarded ✓')
   }
 
   const handlePick = async (contactId) => {
@@ -561,12 +623,13 @@ function ChatApp() {
     const id = await startGroupChat(name, memberIds)
     if (!id) {
       showToast('Could not create the group.')
-      return
+      return null
     }
     setUnreadAnchor(null)
     setActiveId(id)
     markRead(id)
     setMobileChatOpen(true)
+    return id
   }
 
   const handleAddMember = async (memberId) => {
@@ -704,6 +767,7 @@ function ChatApp() {
         chats={chatsWithPresence}
         activeId={activeId}
         onSelect={handleSelect}
+        onAvatarClick={(chat) => setQuickChat(chat)}
         onNewChat={() => setNewChatOpen(true)}
         onNewGroup={() => setNewGroupOpen(true)}
         onScan={() => setScannerOpen(true)}
@@ -794,12 +858,37 @@ function ChatApp() {
           <TabPlaceholder tab={activeTab} />
         )}
       </div>
+      {activeTab === 'chats' && !mobileChatOpen && !helpOpen && (
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          className="animate-pop-in fixed bottom-20 right-4 z-40 grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-wa-green to-accent-2 text-white shadow-[0_12px_30px_-8px_rgba(16,185,129,0.8)] transition-transform hover:scale-105 active:scale-95 md:hidden"
+          aria-label="ChatWave AI help"
+          title="Ask ChatWave AI"
+        >
+          <Sparkles size={20} />
+        </button>
+      )}
+      {!helpOpen && (
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          className="fixed bottom-6 left-[13px] z-40 hidden h-11 w-11 place-items-center rounded-2xl border border-wa-green/25 bg-wa-green/10 text-wa-green shadow-lg transition-colors hover:bg-wa-green/20 md:grid"
+          aria-label="ChatWave AI help"
+          title="Ask ChatWave AI"
+        >
+          <Sparkles size={19} />
+        </button>
+      )}
+      {helpOpen && <HelpAIModal onClose={() => setHelpOpen(false)} />}
       {mobileNavVisible && <Navigation mobile active={activeTab} onChange={setActiveTab} />}
       {forwarding && (
         <ForwardModal
           targets={forwardTargets}
           preview={
-            forwarding.imageUrl && !forwarding.text
+            forwarding.bulk?.length
+              ? `${forwarding.bulk.length} messages`
+              : forwarding.imageUrl && !forwarding.text
               ? '📷 Photo'
               : forwarding.fileUrl && !forwarding.text
                 ? forwarding.fileName || 'Attachment'
@@ -834,6 +923,44 @@ function ChatApp() {
           onToggleBlock={handleToggleBlock}
         />
       )}
+      {quickChat &&
+        (() => {
+          const target = chatsWithPresence.find((chat) => chat.id === quickChat.id) || quickChat
+          return (
+            <ContactActionsModal
+              chat={{ ...target, userId: user.id }}
+              isGroup={Boolean(target.isGroup)}
+              onClose={() => setQuickChat(null)}
+              onChat={() => handleQuickChat(target)}
+              onCall={() => handleQuickCall(target, false)}
+              onVideo={() => handleQuickCall(target, true)}
+              onInfo={() => handleQuickInfo(target)}
+            />
+          )
+        })()}
+      {quickMembersId &&
+        (() => {
+          const target = chatsWithPresence.find((chat) => chat.id === quickMembersId)
+          if (!target) return null
+          return (
+            <GroupMembersModal
+              chat={target}
+              contacts={visibleContacts}
+              currentUserId={user.id}
+              isAdmin={target.createdBy ? target.createdBy === user.id : true}
+              onClose={() => setQuickMembersId(null)}
+              onAdd={handleAddMember}
+              onRemove={handleRemoveMember}
+              onRename={handleRenameGroup}
+              onTransfer={handleTransferAdmin}
+              onDelete={handleDeleteGroup}
+              onLeave={() => {
+                setQuickMembersId(null)
+                handleRemoveMember(user.id)
+              }}
+            />
+          )
+        })()}
       <CallOverlay
         incoming={incoming}
         call={call}
@@ -841,16 +968,25 @@ function ChatApp() {
         remoteStream={remoteStream}
         facingMode={facingMode}
         remoteFacingMode={remoteFacingMode}
+        videoFilter={videoFilter}
+        remoteFilter={remoteFilter}
+        screenSharing={screenSharing}
+        minimized={minimized}
+        onMinimize={minimizeCall}
+        onRestore={restoreCall}
         notice={notice}
         onAccept={acceptCall}
         onDecline={declineCall}
         onEnd={endCall}
         onToggleMute={toggleMute}
         onSwitchCamera={switchCamera}
+        onToggleScreenShare={screenSharing ? stopScreenShare : startScreenShare}
+        onFilterChange={applyVideoFilter}
       />
       {profileOpen && (
         <ProfileModal
           user={user}
+          onOpenHelp={() => setHelpOpen(true)}
           currentName={me.name}
           currentUsername={me.username}
           currentAvatarUrl={me.avatarUrl}

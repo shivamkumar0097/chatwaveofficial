@@ -57,13 +57,19 @@ export const enablePush = async (user) => {
 }
 
 export const disablePush = async (user) => {
+  let endpoint = null
   if (pushSupported()) {
     const registration = await navigator.serviceWorker.getRegistration()
     const subscription = registration && (await registration.pushManager.getSubscription())
+    endpoint = subscription?.endpoint || null
     if (subscription) await subscription.unsubscribe()
   }
-  if (supabase && user) {
-    await supabase.from('push_subscriptions').delete().eq('user_id', user.id)
+  if (supabase && user && endpoint) {
+    await supabase
+      .from('push_subscriptions')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('endpoint', endpoint)
   }
   return true
 }

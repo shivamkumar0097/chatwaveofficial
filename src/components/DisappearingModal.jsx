@@ -1,5 +1,5 @@
 import { Ban, Check, Clock, EyeOff, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const OPTIONS = [
   {
@@ -25,6 +25,14 @@ const OPTIONS = [
 export default function DisappearingModal({ current = 'off', onSave, onClose }) {
   const [value, setValue] = useState(current)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape' && !busy) onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [busy, onClose])
 
   const save = async () => {
     if (busy) return

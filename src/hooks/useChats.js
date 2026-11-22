@@ -95,8 +95,10 @@ const readHidden = (userId) => {
 
 const writeHidden = (userId, messageId) => {
   if (typeof window === 'undefined') return
-  const next = [...new Set([...readHidden(userId), messageId])].slice(-1000)
-  window.localStorage.setItem(hiddenKey(userId), JSON.stringify(next))
+  try {
+    const next = [...new Set([...readHidden(userId), messageId])].slice(-1000)
+    window.localStorage.setItem(hiddenKey(userId), JSON.stringify(next))
+  } catch {}
 }
 
 const mapMessage = (row, myId, readContext = {}) => {
@@ -142,6 +144,7 @@ export function useChats(user, activeId) {
   const [loading, setLoading] = useState(true)
   const activeRef = useRef(activeId)
   const chatsRef = useRef(chats)
+  const loadGenerationRef = useRef(0)
 
   useEffect(() => {
     activeRef.current = activeId
@@ -153,167 +156,176 @@ export function useChats(user, activeId) {
 
   const load = useCallback(async () => {
     if (!user) return
+    const generation = ++loadGenerationRef.current
     setLoading(true)
-    const displayName = user.user_metadata?.full_name || user.email.split('@')[0]
+    try {
+      const displayName =
+        user.user_metadata?.full_name || user.email?.split('@')[0] || 'ChatWave User'
 
-    await supabase
-      .from('profiles')
-      .upsert({ id: user.id, name: displayName }, { onConflict: 'id', ignoreDuplicates: true })
+      await supabase
+        .from('profiles')
+        .upsert({ id: user.id, name: displayName }, { onConflict: 'id', ignoreDuplicates: true })
 
-    const fetchProfiles = async () => {
-      const attempt = await supabase.from('profiles').select(PROFILE_COLUMNS)
-      if (!attempt.error) return attempt.data ?? []
-      // bio column not migrated yet (schema7.sql not applied) — fall back
-      const fallback = await supabase.from('profiles').select(PROFILE_COLUMNS_BASE)
-      return fallback.data ?? []
-    }
-
-    const [allProfiles, membershipResult] = await Promise.all([
-      fetchProfiles(),
-      supabase
-        .from('conversation_members')
-        .select('conversation_id, conversations(id, is_group, title, created_by, disappearing_timer)')
-        .eq('user_id', user.id),
-    ])
-
-    setMe(allProfiles.find((profile) => profile.id === user.id) ?? null)
-    setContacts(
-      allProfiles
-        .filter((profile) => profile.id !== user.id)
-        .map((profile) => ({
-          id: profile.id,
-          name: profile.name,
-          username: profile.username || '',
-          avatarColor: profile.avatar_color || colorFor(profile.id),
-          avatarUrl: profile.avatar_url || null,
-          bio: profile.bio || '',
-        }))
-    )
-
-    const conversations = (membershipResult.data ?? [])
-      .map((row) => row.conversations)
-      .filter(Boolean)
-    const ids = conversations.map((conversation) => conversation.id)
-
-    let memberRows = []
-    let messageRows = []
-    let readRows = []
-
-    if (ids.length) {
-      const baseSelect = 'id, conversation_id, sender_id, content, image_url, created_at'
-      const midSelect = `${baseSelect}, reply_to, reactions, forwarded, edited_at, deleted_for_all, file_url, file_name, file_type, file_size`
-      const fullSelect = `${midSelect}, expires_at, view_once, viewed_by`
-
-      const fetchMessages = async () => {
-        const query = (select) =>
-          supabase
-            .from('messages')
-            .select(select)
-            .in('conversation_id', ids)
-            .order('created_at', { ascending: true })
-            .limit(1000)
-
-        const attempt = await query(fullSelect)
+      const fetchProfiles = async () => {
+        const attempt = await supabase.from('profiles').select(PROFILE_COLUMNS)
         if (!attempt.error) return attempt.data ?? []
-        const midAttempt = await query(midSelect)
-        if (!midAttempt.error) return midAttempt.data ?? []
-        const fallback = await query(baseSelect)
+        // bio column not migrated yet (schema7.sql not applied) — fall back
+        const fallback = await supabase.from('profiles').select(PROFILE_COLUMNS_BASE)
         return fallback.data ?? []
       }
 
-      const fetchMembers = async () => {
-        const attempt = await supabase
-          .from('conversation_members')
-          .select(`conversation_id, user_id, profiles(${PROFILE_COLUMNS})`)
-          .in('conversation_id', ids)
-        if (!attempt.error) return attempt.data ?? []
-        const fallback = await supabase
-          .from('conversation_members')
-          .select(`conversation_id, user_id, profiles(${PROFILE_COLUMNS_BASE})`)
-          .in('conversation_id', ids)
-        return fallback.data ?? []
-      }
-
-      const [membersData, messagesData, readsResult] = await Promise.all([
-        fetchMembers(),
-        fetchMessages(),
+      const [allProfiles, membershipResult] = await Promise.all([
+        fetchProfiles(),
         supabase
-          .from('conversation_reads')
-          .select('conversation_id, user_id, last_read_at')
-          .in('conversation_id', ids),
+          .from('conversation_members')
+          .select('conversation_id, conversations(id, is_group, title, created_by, disappearing_timer)')
+          .eq('user_id', user.id),
       ])
-      memberRows = membersData
-      messageRows = messagesData
-      readRows = readsResult.data ?? []
-    }
 
-    const hidden = new Set(readHidden(user.id))
+      if (generation !== loadGenerationRef.current) return
 
-    const built = conversations.map((conversation) => {
-      const memberIds = memberRows
-        .filter((row) => row.conversation_id === conversation.id)
-        .map((row) => row.user_id)
-      const members = memberRows
-        .filter((row) => row.conversation_id === conversation.id)
-        .map((row) => ({
-          id: row.user_id,
-          name: row.profiles?.name || 'Member',
-          username: row.profiles?.username || '',
-          avatarColor: row.profiles?.avatar_color || colorFor(row.user_id),
-          avatarUrl: row.profiles?.avatar_url || null,
-          bio: row.profiles?.bio || '',
-        }))
-      const other = members.find((member) => member.id !== user.id)
-      const isGroup = Boolean(conversation.is_group)
-      const name =
-        conversation.title ||
-        members.filter((member) => member.id !== user.id).map((member) => member.name).join(', ') ||
-        'Saved messages'
-      const otherReadAt = otherReadAtFor(readRows, conversation.id, user.id)
-      const readMap = readMapFor(readRows, conversation.id)
-      const myReadAt = myReadAtFor(readRows, conversation.id, user.id)
-      const readContext = { memberIds, isGroup, readMap }
-      const messages = messageRows
-        .filter((row) => row.conversation_id === conversation.id && !hidden.has(row.id))
-        .map((row) => mapMessage(row, user.id, readContext))
-        .filter((message) => !isMessageExpired(message))
-      const unread = messages.filter(
-        (message) =>
-          message.from === 'them' &&
-          (!myReadAt || new Date(message.createdAt) > new Date(myReadAt))
-      ).length
+      setMe(allProfiles.find((profile) => profile.id === user.id) ?? null)
+      setContacts(
+        allProfiles
+          .filter((profile) => profile.id !== user.id)
+          .map((profile) => ({
+            id: profile.id,
+            name: profile.name,
+            username: profile.username || '',
+            avatarColor: profile.avatar_color || colorFor(profile.id),
+            avatarUrl: profile.avatar_url || null,
+            bio: profile.bio || '',
+          }))
+      )
 
-      return {
-        id: conversation.id,
-        name,
-        avatarColor: isGroup ? colorFor(conversation.id) : other?.avatarColor || colorFor(conversation.id),
-        avatarUrl: isGroup ? null : other?.avatarUrl || null,
-        bio: isGroup ? '' : other?.bio || '',
-        isGroup,
-        createdBy: conversation.created_by || null,
-        disappearingTimer: normalizeTimer(conversation.disappearing_timer),
-        members,
-        memberIds,
-        lastSeen: other?.last_seen ?? null,
-        myReadAt,
-        otherReadAt,
-        readMap,
-        online: false,
-        typing: false,
-        unread,
-        lastTime: labelOf(messages[messages.length - 1]?.createdAt),
-        messages,
+      const conversations = (membershipResult.data ?? [])
+        .map((row) => row.conversations)
+        .filter(Boolean)
+      const ids = conversations.map((conversation) => conversation.id)
+
+      let memberRows = []
+      let messageRows = []
+      let readRows = []
+
+      if (ids.length) {
+        const baseSelect = 'id, conversation_id, sender_id, content, image_url, created_at'
+        const midSelect = `${baseSelect}, reply_to, reactions, forwarded, edited_at, deleted_for_all, file_url, file_name, file_type, file_size`
+        const fullSelect = `${midSelect}, expires_at, view_once, viewed_by`
+
+        const fetchMessages = async () => {
+          const query = (select) =>
+            supabase
+              .from('messages')
+              .select(select)
+              .in('conversation_id', ids)
+              .order('created_at', { ascending: true })
+              .limit(1000)
+
+          const attempt = await query(fullSelect)
+          if (!attempt.error) return attempt.data ?? []
+          const midAttempt = await query(midSelect)
+          if (!midAttempt.error) return midAttempt.data ?? []
+          const fallback = await query(baseSelect)
+          return fallback.data ?? []
+        }
+
+        const fetchMembers = async () => {
+          const attempt = await supabase
+            .from('conversation_members')
+            .select(`conversation_id, user_id, profiles(${PROFILE_COLUMNS})`)
+            .in('conversation_id', ids)
+          if (!attempt.error) return attempt.data ?? []
+          const fallback = await supabase
+            .from('conversation_members')
+            .select(`conversation_id, user_id, profiles(${PROFILE_COLUMNS_BASE})`)
+            .in('conversation_id', ids)
+          return fallback.data ?? []
+        }
+
+        const [membersData, messagesData, readsResult] = await Promise.all([
+          fetchMembers(),
+          fetchMessages(),
+          supabase
+            .from('conversation_reads')
+            .select('conversation_id, user_id, last_read_at')
+            .in('conversation_id', ids),
+        ])
+        memberRows = membersData
+        messageRows = messagesData
+        readRows = readsResult.data ?? []
       }
-    })
 
-    built.sort((a, b) => {
-      const aTime = a.messages[a.messages.length - 1]?.createdAt ?? ''
-      const bTime = b.messages[b.messages.length - 1]?.createdAt ?? ''
-      return bTime.localeCompare(aTime)
-    })
+      const hidden = new Set(readHidden(user.id))
 
-    setChats(built)
-    setLoading(false)
+      const built = conversations.map((conversation) => {
+        const memberIds = memberRows
+          .filter((row) => row.conversation_id === conversation.id)
+          .map((row) => row.user_id)
+        const members = memberRows
+          .filter((row) => row.conversation_id === conversation.id)
+          .map((row) => ({
+            id: row.user_id,
+            name: row.profiles?.name || 'Member',
+            username: row.profiles?.username || '',
+            avatarColor: row.profiles?.avatar_color || colorFor(row.user_id),
+            avatarUrl: row.profiles?.avatar_url || null,
+            bio: row.profiles?.bio || '',
+          }))
+        const other = members.find((member) => member.id !== user.id)
+        const isGroup = Boolean(conversation.is_group)
+        const name =
+          conversation.title ||
+          members.filter((member) => member.id !== user.id).map((member) => member.name).join(', ') ||
+          'Saved messages'
+        const otherReadAt = otherReadAtFor(readRows, conversation.id, user.id)
+        const readMap = readMapFor(readRows, conversation.id)
+        const myReadAt = myReadAtFor(readRows, conversation.id, user.id)
+        const readContext = { memberIds, isGroup, readMap }
+        const messages = messageRows
+          .filter((row) => row.conversation_id === conversation.id && !hidden.has(row.id))
+          .map((row) => mapMessage(row, user.id, readContext))
+          .filter((message) => !isMessageExpired(message))
+        const unread = messages.filter(
+          (message) =>
+            message.from === 'them' &&
+            (!myReadAt || new Date(message.createdAt) > new Date(myReadAt))
+        ).length
+
+        return {
+          id: conversation.id,
+          name,
+          avatarColor: isGroup ? colorFor(conversation.id) : other?.avatarColor || colorFor(conversation.id),
+          avatarUrl: isGroup ? null : other?.avatarUrl || null,
+          bio: isGroup ? '' : other?.bio || '',
+          isGroup,
+          createdBy: conversation.created_by || null,
+          disappearingTimer: normalizeTimer(conversation.disappearing_timer),
+          members,
+          memberIds,
+          lastSeen: other?.last_seen ?? null,
+          myReadAt,
+          otherReadAt,
+          readMap,
+          online: false,
+          typing: false,
+          unread,
+          lastTime: labelOf(messages[messages.length - 1]?.createdAt),
+          messages,
+        }
+      })
+
+      built.sort((a, b) => {
+        const aTime = a.messages[a.messages.length - 1]?.createdAt ?? ''
+        const bTime = b.messages[b.messages.length - 1]?.createdAt ?? ''
+        return bTime.localeCompare(aTime)
+      })
+
+      if (generation !== loadGenerationRef.current) return
+
+      setChats(built)
+    } finally {
+      setLoading(false)
+    }
   }, [user])
 
   useEffect(() => {
@@ -571,7 +583,11 @@ export function useChats(user, activeId) {
         (payload) => {
           const conversationId = payload.new?.conversation_id || payload.old?.conversation_id
           if (!conversationId) return
-          if (!chatsRef.current.some((chat) => chat.id === conversationId)) return
+          if (
+            payload.new?.user_id !== user.id &&
+            !chatsRef.current.some((chat) => chat.id === conversationId)
+          )
+            return
           load()
         }
       )

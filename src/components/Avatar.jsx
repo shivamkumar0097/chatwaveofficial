@@ -4,12 +4,14 @@ export default function Avatar({ name, color = '#7c5cff', size = 'md', online, s
     md: 'h-12 w-12',
     lg: 'h-[46px] w-[46px]',
     xl: 'h-24 w-24',
+    xxl: 'h-64 w-64',
   }
   const texts = {
     sm: 'text-[11px]',
     md: 'text-sm',
     lg: 'text-[15px]',
     xl: 'text-2xl',
+    xxl: 'text-6xl',
   }
 
   const initials = (name || '?')

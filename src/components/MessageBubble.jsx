@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   Check,
   CheckCheck,
+  CheckSquare,
   Clock,
   Copy,
   CornerUpLeft,
@@ -10,6 +11,8 @@ import {
   Forward,
   Info,
   Pencil,
+  Pin,
+  PinOff,
   Smile,
   Star,
   Trash2,
@@ -52,7 +55,12 @@ export default function MessageBubble({
   onEdit,
   onDelete,
   onStar,
+  onPin,
+  selectMode = false,
+  selected = false,
+  onSelectToggle,
   starred = false,
+  pinned = false,
   replyTo,
   replyAuthorName,
   senderName = null,
@@ -72,6 +80,7 @@ export default function MessageBubble({
   const axis = useRef(null)
   const longPress = useRef(null)
   const moved = useRef(false)
+  const lastTapRef = useRef({ time: 0, x: 0, y: 0 })
 
   const maxDrag = 56
 
@@ -101,7 +110,19 @@ export default function MessageBubble({
   }, [])
 
   const touchStart = (event) => {
+    if (selectMode || message.deleted) return
+    if (event.target.closest('button, a, input, audio, video, [role="button"]')) return
     const touch = event.touches[0]
+    const previous = lastTapRef.current
+    const now = performance.now()
+    if (now - previous.time < 300 && Math.abs(touch.clientX - previous.x) < 30 && Math.abs(touch.clientY - previous.y) < 30) {
+      clearPress()
+      lastTapRef.current = { time: 0, x: 0, y: 0 }
+      toggleReaction('❤️')
+      buzz(12)
+      return
+    }
+    lastTapRef.current = { time: now, x: touch.clientX, y: touch.clientY }
     startX.current = touch.clientX
     startY.current = touch.clientY
     axis.current = null
@@ -183,11 +204,13 @@ export default function MessageBubble({
         </span>
       )}
       {starred && <Star size={10} className="fill-current opacity-80" />}
+      {pinned && <Pin size={10} className="rotate-45 opacity-80" />}
     </span>
   )
 
   const bubble = (
     <div
+      id={`message-${message.id}`}
       className={`group relative w-full rounded-2xl px-3 py-2 text-[15px] leading-[1.5] shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl ${
         mine
           ? 'rounded-br-md bg-gradient-to-br from-[#7c5cff] to-[#5b3df5] text-white shadow-[0_10px_28px_-16px_rgba(124,92,255,0.9)]'
@@ -288,7 +311,7 @@ export default function MessageBubble({
                 href={message.fileUrl}
                 target="_blank"
                 rel="noreferrer"
-                download={message.fileName || true}
+                download={message.fileName || undefined}
                 className={`mb-1 flex items-center gap-2.5 rounded-xl border px-2.5 py-2 transition-colors ${
                   mine
                     ? 'border-white/25 bg-black/20 hover:bg-black/30'
@@ -387,8 +410,22 @@ export default function MessageBubble({
   return (
     <div
       id={`message-${message.id}`}
-      className={`bubble-in flex scroll-mt-24 ${mine ? 'msg-send justify-end' : 'justify-start'}`}
+      onClick={() => {
+        if (selectMode && !message.deleted) onSelectToggle?.(message)
+      }}
+      className={`bubble-in relative flex scroll-mt-24 ${mine ? 'msg-send justify-end' : 'justify-start'} ${
+        selectMode ? 'cursor-pointer' : ''
+      }`}
     >
+      {selectMode && !message.deleted && (
+        <span
+          className={`absolute top-1/2 z-10 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-full border-2 ${
+            mine ? '-right-6' : '-left-6'
+          } ${selected ? 'border-wa-green bg-wa-green text-white' : 'border-white/40'}`}
+        >
+          {selected && <Check size={12} />}
+        </span>
+      )}
       <div className={`relative flex w-full items-center gap-1 ${mine ? 'justify-end' : 'justify-start'}`}>
         <div
           className="relative max-w-[80%] touch-pan-y select-none sm:max-w-[66%]"
@@ -400,9 +437,14 @@ export default function MessageBubble({
               event.preventDefault()
             }
           }}
+          onDoubleClick={(event) => {
+            if (selectMode || message.deleted) return
+            if (event.target.closest('button, a, input, audio, video, [role="button"]')) return
+            toggleReaction('❤️')
+          }}
           onMouseDown={(event) => {
-            if (event.button !== 0) return
-            if (event.target.closest('video, audio, a')) return
+            if (selectMode || event.button !== 0) return
+            if (event.target.closest('button, a, input, audio, video, [role="button"]')) return
             clearPress()
             longPress.current = setTimeout(() => openSheet(), 450)
           }}
@@ -569,6 +611,38 @@ export default function MessageBubble({
                         className={starred ? 'fill-current text-amber-300' : 'text-wa-muted'}
                       />
                       {starred ? 'Remove from starred' : 'Star message'}
+                    </button>
+                  )}
+
+                  {!message.deleted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeSheet()
+                        onPin?.(message)
+                      }}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[14px] font-medium text-wa-text transition-colors hover:bg-white/[0.06]"
+                    >
+                      {pinned ? (
+                        <PinOff size={17} className="text-wa-green" />
+                      ) : (
+                        <Pin size={17} className="text-wa-muted" />
+                      )}
+                      {pinned ? 'Unpin message' : 'Pin message'}
+                    </button>
+                  )}
+
+                  {!message.deleted && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeSheet()
+                        onSelectToggle?.(message)
+                      }}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[14px] font-medium text-wa-text transition-colors hover:bg-white/[0.06]"
+                    >
+                      <CheckSquare size={17} className="text-wa-muted" />
+                      Select messages
                     </button>
                   )}
 

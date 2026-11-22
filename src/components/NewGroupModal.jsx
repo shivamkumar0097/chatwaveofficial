@@ -17,13 +17,18 @@ export default function NewGroupModal({ contacts, onClose, onCreate }) {
   const toggle = (id) =>
     setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
 
-  const submit = () => {
+  const submit = async () => {
     if (!canCreate) return
     setBusy(true)
-    Promise.resolve(onCreate(name.trim(), selected)).finally(() => {
+    let created
+    try {
+      created = await onCreate(name.trim(), selected)
+    } catch {
+      created = null
+    } finally {
       setBusy(false)
-      onClose()
-    })
+    }
+    if (created !== null && created !== false) onClose()
   }
 
   return (

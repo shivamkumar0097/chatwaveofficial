@@ -98,6 +98,16 @@ export default function StatusPanel({ groups, myUserId, loading, onAddText, onAd
     return () => window.clearTimeout(timer)
   }, [opened, current?.kind, myUserId, onViewed])
 
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return
+      if (opened) setOpened(null)
+      else if (creating) setCreating(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [opened, creating])
+
   return (
     <section className="tab-fade flex min-w-0 flex-1 flex-col bg-wa-bg">
       <header className="flex items-center justify-between border-b border-wa-border px-4 py-4">

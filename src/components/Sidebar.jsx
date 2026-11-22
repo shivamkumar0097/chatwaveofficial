@@ -21,6 +21,7 @@ export default function Sidebar({
   chats,
   activeId,
   onSelect,
+  onAvatarClick,
   onNewChat,
   onNewGroup,
   onScan,
@@ -362,6 +363,7 @@ export default function Sidebar({
               active={chat.id === activeId}
               pinned={Boolean(pinnedIds?.has(chat.id))}
               onSelect={() => onSelect(chat.id)}
+              onAvatarClick={onAvatarClick}
               onLongPress={(target, x, y) => setChatMenuState({ chat: target, x, y })}
             />
           ))

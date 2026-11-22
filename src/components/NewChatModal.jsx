@@ -1,9 +1,17 @@
 ﻿import { Search, UserPlus, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Avatar from '@/components/Avatar'
 
 export default function NewChatModal({ contacts, onClose, onPick }) {
   const [query, setQuery] = useState('')
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   const term = query.trim().toLowerCase().replace(/^@/, '')
   const filtered = term

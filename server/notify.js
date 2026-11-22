@@ -51,6 +51,15 @@ export async function handleNotify({ method, headers = {}, body }) {
 
   if (record.call_id && record.callee_id) {
     const callId = record.call_id
+    const { data: invite } = await supabase
+      .from('call_invites')
+      .select('call_id, status')
+      .eq('call_id', callId)
+      .eq('callee_id', record.callee_id)
+      .maybeSingle()
+    if (!invite || invite.status !== 'pending') {
+      return { statusCode: 200, body: 'Ignored' }
+    }
     const details = record.payload || {}
     const callerName = details.fromName || 'Someone'
     const { data: subscriptions } = await supabase
@@ -72,8 +81,21 @@ export async function handleNotify({ method, headers = {}, body }) {
     return { statusCode: 200, body: 'OK' }
   }
 
-  if (!record.conversation_id || !record.sender_id) {
+  if (!record.conversation_id || !record.sender_id || !record.id) {
     return { statusCode: 200, body: 'No data' }
+  }
+
+  const { data: message } = await supabase
+    .from('messages')
+    .select('id, conversation_id, sender_id')
+    .eq('id', record.id)
+    .maybeSingle()
+  if (
+    !message ||
+    message.conversation_id !== record.conversation_id ||
+    message.sender_id !== record.sender_id
+  ) {
+    return { statusCode: 200, body: 'Ignored' }
   }
 
   const { data: members } = await supabase

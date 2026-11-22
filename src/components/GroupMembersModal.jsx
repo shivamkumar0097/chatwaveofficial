@@ -49,6 +49,47 @@ export default function GroupMembersModal({
     if (ok) setRenaming(false)
   }
 
+  const leaveConfirm = (
+    <div className="animate-pop-in rounded-2xl border border-red-400/20 bg-red-500/[0.06] p-3.5">
+      <div className="flex items-start gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-red-500/15 text-red-300">
+          <LogOut size={16} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-wa-text">Leave this group?</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-wa-muted">
+            You won't be able to send or receive messages in{' '}
+            <span className="font-medium text-wa-text">{chat.name}</span> unless you're
+            added back.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => setConfirmLeave(false)}
+          className="flex-1 rounded-xl border border-white/10 py-2.5 text-[12px] font-medium text-wa-muted transition-colors hover:bg-white/[0.05]"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={Boolean(busyId)}
+          onClick={() =>
+            run('leave', async () => {
+              await onLeave?.()
+              setConfirmLeave(false)
+            })
+          }
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-500/20 py-2.5 text-[12px] font-semibold text-red-200 transition-colors hover:bg-red-500/30 disabled:opacity-50"
+        >
+          <LogOut size={14} />
+          Leave group
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div
       className="animate-fade-in fixed inset-0 z-[95] flex items-start justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center"
@@ -127,7 +168,8 @@ export default function GroupMembersModal({
           </div>
         )}
 
-        <div className="border-b border-white/[0.06] px-4 py-3">
+        {isAdmin && (
+          <div className="border-b border-white/[0.06] px-4 py-3">
             <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.035] px-3 py-2">
               <Search size={15} className="shrink-0 text-wa-muted" />
               <input
@@ -166,6 +208,7 @@ export default function GroupMembersModal({
               )}
             </div>
           </div>
+        )}
 
         <div className="p-2">
           <p className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-wa-muted">
@@ -225,16 +268,18 @@ export default function GroupMembersModal({
                       <Crown size={15} />
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    disabled={Boolean(busyId)}
-                    onClick={() => run(member.id, onRemove)}
-                    className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
-                    aria-label={`Remove ${member.name}`}
-                  >
-                    <Trash2 size={14} />
-                    Remove
-                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={Boolean(busyId)}
+                      onClick={() => run(member.id, onRemove)}
+                      className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-50"
+                      aria-label={`Remove ${member.name}`}
+                    >
+                      <Trash2 size={14} />
+                      Remove
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -243,7 +288,9 @@ export default function GroupMembersModal({
 
         {isAdmin ? (
           <div className="border-t border-white/[0.07] p-3">
-            {confirmDelete ? (
+            {confirmLeave ? (
+              leaveConfirm
+            ) : confirmDelete ? (
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -262,60 +309,30 @@ export default function GroupMembersModal({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 py-2.5 text-[12.5px] font-semibold text-red-300 transition-colors hover:bg-red-500/20"
-              >
-                <Trash2 size={15} />
-                Delete group
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 py-2.5 text-[12.5px] font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+                >
+                  <Trash2 size={15} />
+                  Delete group
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmLeave(true)}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-2.5 text-[12.5px] font-semibold text-wa-muted transition-colors hover:bg-white/[0.05]"
+                >
+                  <LogOut size={15} />
+                  Leave group
+                </button>
+              </>
             )}
-            <p className="mt-2 text-center text-[10px] text-wa-muted">
-              Transfer admin rights before leaving the group.
-            </p>
           </div>
         ) : (
           <div className="border-t border-white/[0.07] p-3">
             {confirmLeave ? (
-              <div className="animate-pop-in rounded-2xl border border-red-400/20 bg-red-500/[0.06] p-3.5">
-                <div className="flex items-start gap-2.5">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-red-500/15 text-red-300">
-                    <LogOut size={16} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-wa-text">Leave this group?</p>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-wa-muted">
-                      You won't be able to send or receive messages in{' '}
-                      <span className="font-medium text-wa-text">{chat.name}</span> unless you're
-                      added back.
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmLeave(false)}
-                    className="flex-1 rounded-xl border border-white/10 py-2.5 text-[12px] font-medium text-wa-muted transition-colors hover:bg-white/[0.05]"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={Boolean(busyId)}
-                    onClick={() =>
-                      run('leave', async () => {
-                        await onLeave?.()
-                        setConfirmLeave(false)
-                      })
-                    }
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-500/20 py-2.5 text-[12px] font-semibold text-red-200 transition-colors hover:bg-red-500/30 disabled:opacity-50"
-                  >
-                    <LogOut size={14} />
-                    Leave group
-                  </button>
-                </div>
-              </div>
+              leaveConfirm
             ) : (
               <button
                 type="button"

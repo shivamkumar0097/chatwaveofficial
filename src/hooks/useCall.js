@@ -70,6 +70,27 @@ const writeHistory = (userId, entries) => {
   window.localStorage.setItem(historyKey(userId), JSON.stringify(entries.slice(0, 100)))
 }
 
+let moduleActiveCall = false
+
+const closeStaleOngoingNotifications = async () => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  try {
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((resolve) => window.setTimeout(() => resolve(null), 800)),
+    ])
+    if (!registration) return
+    const list = await registration.getNotifications({ tag: 'cw-ongoing-call' })
+    list.forEach((item) => item.close())
+  } catch {}
+}
+
+if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  window.setTimeout(() => {
+    if (!moduleActiveCall) closeStaleOngoingNotifications()
+  }, 600)
+}
+
 export function useCall(user) {
   const [incoming, setIncoming] = useState(null)
   const [call, setCall] = useState(null)
@@ -77,6 +98,11 @@ export function useCall(user) {
   const [remoteStream, setRemoteStream] = useState(null)
   const [facingMode, setFacingMode] = useState('user')
   const [remoteFacingMode, setRemoteFacingMode] = useState('environment')
+  const [videoFilter, setVideoFilter] = useState('none')
+  const [remoteFilter, setRemoteFilter] = useState('none')
+  const [screenSharing, setScreenSharing] = useState(false)
+  const [remoteSharing, setRemoteSharing] = useState(false)
+  const [minimized, setMinimized] = useState(false)
   const [notice, setNotice] = useState('')
   const [history, setHistory] = useState(() => readHistory(user?.id))
 
@@ -90,6 +116,16 @@ export function useCall(user) {
   const localRef = useRef(null)
   const facingModeRef = useRef('user')
   const switchingRef = useRef(false)
+  const screenSharingRef = useRef(false)
+  const remoteSharingRef = useRef(false)
+  const minimizedRef = useRef(false)
+  const overlayEntryRef = useRef(false)
+  const overlayDepthRef = useRef(0)
+  const unwindingRef = useRef(false)
+  const cleanupRef = useRef(null)
+  const screenTrackRef = useRef(null)
+  const cameraTrackRef = useRef(null)
+  const stopScreenRef = useRef(null)
   const peerChannelsRef = useRef(new Map())
   const pendingIceRef = useRef([])
   const timerRef = useRef(null)
@@ -193,6 +229,40 @@ export function useCall(user) {
     noticeTimerRef.current = window.setTimeout(() => setNotice(''), 3600)
   }, [])
 
+  const showOngoingNotification = useCallback(async (info) => {
+    if (
+      !info ||
+      typeof Notification === 'undefined' ||
+      Notification.permission !== 'granted' ||
+      !('serviceWorker' in navigator)
+    ) return
+    try {
+      const registration = await navigator.serviceWorker.ready
+      await registration.showNotification(
+        info.phase === 'connected' ? `In call with ${info.peerName}` : `Calling ${info.peerName}...`,
+        {
+          body: info.withVideo ? 'Video call • tap to return' : 'Voice call • tap to return',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: 'cw-ongoing-call',
+          renotify: false,
+          requireInteraction: true,
+          silent: true,
+          data: { callUi: 'restore', url: '/' },
+        }
+      )
+    } catch {}
+  }, [])
+
+  const clearOngoingNotification = useCallback(async () => {
+    if (!('serviceWorker' in navigator)) return
+    try {
+      const registration = await navigator.serviceWorker.ready
+      const list = await registration.getNotifications({ tag: 'cw-ongoing-call' })
+      list.forEach((item) => item.close())
+    } catch {}
+  }, [])
+
   const sendSignal = useCallback(
     async (peerId, payload) => {
       if (!user || !peerId || !supabase) return
@@ -224,6 +294,35 @@ export function useCall(user) {
     [user]
   )
 
+  const pushOverlayEntry = useCallback(() => {
+    if (typeof window === 'undefined' || unwindingRef.current || overlayEntryRef.current) return
+    if (window.history.state?.cwCallOverlay) {
+      overlayDepthRef.current = Math.max(overlayDepthRef.current, 1)
+      overlayEntryRef.current = true
+      return
+    }
+    const depth = overlayDepthRef.current + 1
+    window.history.pushState({ cwCallOverlay: true, cwDepth: depth }, '')
+    overlayDepthRef.current = depth
+    overlayEntryRef.current = true
+  }, [])
+
+  const unwindOverlayEntry = useCallback(() => {
+    if (typeof window === 'undefined') return
+    const depth = overlayDepthRef.current
+    overlayDepthRef.current = 0
+    overlayEntryRef.current = false
+    if (depth > 0 && window.history.state?.cwCallOverlay) {
+      unwindingRef.current = true
+      window.history.go(-depth)
+      window.setTimeout(() => {
+        unwindingRef.current = false
+      }, 500)
+      return
+    }
+    if (window.history.state?.cwCallOverlay) window.history.replaceState({}, '')
+  }, [])
+
   const cleanup = useCallback(
     (notifyPeer = false) => {
       stopRingtone()
@@ -253,6 +352,21 @@ export function useCall(user) {
       pcRef.current = null
       if (localRef.current) localRef.current.getTracks().forEach((track) => track.stop())
       localRef.current = null
+      if (screenTrackRef.current) {
+        try { screenTrackRef.current.stop() } catch {}
+        screenTrackRef.current = null
+      }
+      cameraTrackRef.current = null
+      screenSharingRef.current = false
+      setScreenSharing(false)
+      remoteSharingRef.current = false
+      setRemoteSharing(false)
+      minimizedRef.current = false
+      setMinimized(false)
+      setVideoFilter('none')
+      setRemoteFilter('none')
+      clearOngoingNotification()
+      unwindOverlayEntry()
       pendingIceRef.current = []
       incomingRef.current = null
       callRef.current = null
@@ -266,7 +380,7 @@ export function useCall(user) {
       setFacingMode('user')
       setRemoteFacingMode('environment')
     },
-    [sendSignal, clearInvite]
+    [sendSignal, clearInvite, clearOngoingNotification, unwindOverlayEntry]
   )
 
   const patchCall = useCallback((patch) => {
@@ -323,6 +437,57 @@ export function useCall(user) {
     }
     pendingIceRef.current = []
   }, [])
+
+  const sendRenegotiateOffer = useCallback(async () => {
+    const pc = pcRef.current
+    const current = callRef.current
+    if (!pc || !current || pc.signalingState !== 'stable') return false
+    try {
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      const sent = await sendSignal(current.peerId, {
+        type: 'renegotiate',
+        callId: current.callId,
+        sdp: descriptionOf(pc.localDescription),
+      })
+      return Boolean(sent)
+    } catch {
+      return false
+    }
+  }, [sendSignal])
+
+  const videoSenderOf = useCallback((pc) => {
+    const byTrack = pc.getSenders().find((sender) => sender.track?.kind === 'video')
+    if (byTrack) return byTrack
+    const transceiver = pc.getTransceivers?.().find(
+      (item) => item.receiver?.track?.kind === 'video'
+    )
+    return transceiver?.sender || null
+  }, [])
+
+  const replaceVideoTrack = useCallback(
+    async (track) => {
+      const pc = pcRef.current
+      if (!pc || pc.signalingState === 'closed') return false
+      const sender = videoSenderOf(pc)
+      try {
+        if (sender) {
+          await sender.replaceTrack(track)
+        } else if (track) {
+          const grouped = new MediaStream([...(localRef.current?.getAudioTracks() || []), track])
+          pc.addTrack(track, grouped)
+          const sent = await sendRenegotiateOffer()
+          if (!sent) return false
+        } else {
+          return false
+        }
+        return true
+      } catch {
+        return false
+      }
+    },
+    [sendRenegotiateOffer, videoSenderOf]
+  )
 
   const handleSignal = useCallback(
     async (payload) => {
@@ -384,6 +549,46 @@ export function useCall(user) {
       if (type === 'camera') {
         if (!current || current.callId !== payload.callId) return
         setRemoteFacingMode(payload.facingMode === 'user' ? 'user' : 'environment')
+        return
+      }
+
+      if (type === 'filter') {
+        if (!current || current.callId !== payload.callId) return
+        setRemoteFilter(typeof payload.filter === 'string' ? payload.filter : 'none')
+        return
+      }
+
+      if (type === 'screen') {
+        if (!current || current.callId !== payload.callId) return
+        const sharing = Boolean(payload.sharing)
+        remoteSharingRef.current = sharing
+        setRemoteSharing(sharing)
+        patchCall({ remoteSharing: sharing })
+        return
+      }
+
+      if (type === 'renegotiate') {
+        const pc = pcRef.current
+        if (!pc || !current || current.callId !== payload.callId) return
+        try {
+          await pc.setRemoteDescription(payload.sdp)
+          const answer = await pc.createAnswer()
+          await pc.setLocalDescription(answer)
+          await sendSignal(payload.from, {
+            type: 'renegotiate-answer',
+            callId: payload.callId,
+            sdp: descriptionOf(pc.localDescription),
+          })
+        } catch {}
+        return
+      }
+
+      if (type === 'renegotiate-answer') {
+        const pc = pcRef.current
+        if (!pc || !current || current.callId !== payload.callId) return
+        try {
+          await pc.setRemoteDescription(payload.sdp)
+        } catch {}
         return
       }
 
@@ -594,15 +799,66 @@ export function useCall(user) {
     restore()
   }, [user, sendSignal, showIncoming, showMissedNotification])
 
+  useEffect(() => {
+    cleanupRef.current = cleanup
+  }, [cleanup])
+
   useEffect(
     () => () => {
-      cleanup(false)
+      cleanupRef.current?.(false)
       peerChannelsRef.current.forEach((channel) => supabase?.removeChannel(channel))
       peerChannelsRef.current.clear()
       if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current)
     },
-    [cleanup]
+    []
   )
+
+  useEffect(() => {
+    if (!call) {
+      clearOngoingNotification()
+      return
+    }
+    showOngoingNotification(call)
+  }, [call, showOngoingNotification, clearOngoingNotification])
+
+  useEffect(() => {
+    const active = Boolean(call?.callId)
+    moduleActiveCall = active
+    if (active) pushOverlayEntry()
+  }, [call?.callId, pushOverlayEntry])
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (unwindingRef.current) return
+      if (!callRef.current) return
+      if (!window.history.state?.cwCallOverlay && overlayDepthRef.current > 0) {
+        overlayDepthRef.current -= 1
+      }
+      overlayEntryRef.current = false
+      if (minimizedRef.current) return
+      minimizedRef.current = true
+      setMinimized(true)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  const minimizeCall = useCallback(() => {
+    if (!callRef.current || minimizedRef.current) return
+    pushOverlayEntry()
+    minimizedRef.current = true
+    setMinimized(true)
+  }, [pushOverlayEntry])
+
+  const restoreCall = useCallback(() => {
+    if (!callRef.current) {
+      closeStaleOngoingNotifications()
+      return
+    }
+    minimizedRef.current = false
+    setMinimized(false)
+    pushOverlayEntry()
+  }, [pushOverlayEntry])
 
   const getStream = useCallback(async (withVideo, mode = 'user') => {
     const constrained = withVideo ? videoConstraints(mode) : false
@@ -955,6 +1211,98 @@ export function useCall(user) {
     }
   }, [sendSignal, showNotice])
 
+  const stopScreenShare = useCallback(async () => {
+    const current = callRef.current
+    const audioTracks = localRef.current?.getAudioTracks() || []
+    const screenTrack = screenTrackRef.current
+    if (screenTrack) {
+      screenTrack.onended = null
+      try { screenTrack.stop() } catch {}
+      screenTrackRef.current = null
+    }
+    screenSharingRef.current = false
+    setScreenSharing(false)
+    if (current) {
+      try {
+        await sendSignal(current.peerId, { type: 'screen', callId: current.callId, sharing: false })
+      } catch {}
+    }
+
+    const camera = cameraTrackRef.current
+    if (camera && camera.readyState === 'live') {
+      const ok = await replaceVideoTrack(camera)
+      const next = new MediaStream([...audioTracks, camera])
+      localRef.current = next
+      if (ok) setLocalStream(next)
+    } else {
+      await replaceVideoTrack(null)
+      localRef.current = new MediaStream(audioTracks)
+      setLocalStream(localRef.current)
+    }
+  }, [replaceVideoTrack, sendSignal])
+
+  useEffect(() => {
+    stopScreenRef.current = stopScreenShare
+  }, [stopScreenShare])
+
+  const startScreenShare = useCallback(async () => {
+    if (screenSharingRef.current) {
+      await stopScreenShare()
+      return true
+    }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      showNotice('Screen sharing is not supported here')
+      return false
+    }
+    const current = callRef.current
+    if (!current) return false
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 15 } },
+        audio: false,
+      })
+      const track = display.getVideoTracks()[0]
+      if (!track) {
+        display.getTracks().forEach((item) => item.stop())
+        return false
+      }
+      if (!cameraTrackRef.current) {
+        cameraTrackRef.current = localRef.current?.getVideoTracks()[0] || null
+      }
+      track.onended = () => stopScreenRef.current?.()
+      const ok = await replaceVideoTrack(track)
+      if (!ok) {
+        try { track.stop() } catch {}
+        showNotice('Could not share your screen')
+        return false
+      }
+      screenTrackRef.current = track
+      screenSharingRef.current = true
+      const next = new MediaStream([...(localRef.current?.getAudioTracks() || []), track])
+      localRef.current = next
+      setLocalStream(next)
+      setScreenSharing(true)
+      try {
+        await sendSignal(current.peerId, { type: 'screen', callId: current.callId, sharing: true })
+      } catch {}
+      return true
+    } catch (error) {
+      if (error?.name !== 'NotAllowedError') showNotice('Screen sharing was cancelled')
+      return false
+    }
+  }, [replaceVideoTrack, sendSignal, showNotice, stopScreenShare])
+
+  const applyVideoFilter = useCallback(
+    (filter) => {
+      setVideoFilter(filter)
+      const current = callRef.current
+      if (current) {
+        sendSignal(current.peerId, { type: 'filter', callId: current.callId, filter })
+      }
+    },
+    [sendSignal]
+  )
+
   const endCall = useCallback(() => cleanup(true), [cleanup])
 
   const toggleMute = useCallback(() => {
@@ -974,6 +1322,16 @@ export function useCall(user) {
     remoteStream,
     facingMode,
     remoteFacingMode,
+    videoFilter,
+    remoteFilter,
+    screenSharing,
+    remoteSharing,
+    minimized,
+    minimizeCall,
+    restoreCall,
+    startScreenShare,
+    stopScreenShare,
+    applyVideoFilter,
     notice,
     startCall,
     acceptCall,

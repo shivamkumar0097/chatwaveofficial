@@ -7,7 +7,20 @@ export default function QRScanner({ onClose, onPick }) {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
   const scannedRef = useRef(false)
+  const onPickRef = useRef(onPick)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    onPickRef.current = onPick
+  }, [onPick])
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   useEffect(() => {
     let active = true
@@ -19,7 +32,7 @@ export default function QRScanner({ onClose, onPick }) {
       .decodeFromVideoDevice(undefined, video, (result) => {
         if (!active || scannedRef.current || !result) return
         scannedRef.current = true
-        onPick(parseQrPayload(result.getText()))
+        onPickRef.current(parseQrPayload(result.getText()))
       })
       .then((controls) => {
         if (!active) controls.stop()
@@ -34,7 +47,7 @@ export default function QRScanner({ onClose, onPick }) {
       controlsRefLocal.current?.stop()
       video?.srcObject?.getTracks?.().forEach((track) => track.stop())
     }
-  }, [onPick])
+  }, [])
 
   return (
     <div className="animate-fade-in fixed inset-0 z-[140] flex flex-col items-center justify-center bg-black/90 p-4 backdrop-blur-md">

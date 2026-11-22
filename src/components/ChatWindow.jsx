@@ -9,6 +9,8 @@ import {
   Check,
   Clock,
   Download,
+  Forward,
+  ImagePlus,
   MessageSquareDashed,
   MoreVertical,
   Palette,
@@ -18,6 +20,7 @@ import {
   Search,
   Sparkles,
   Star,
+  Trash2,
   UserRound,
   Users,
   Video,
@@ -70,6 +73,41 @@ const muteFromStorage = (raw) => {
   return Number.isFinite(until) && until > Date.now() ? until : null
 }
 
+const readWallpaperFile = (file) =>
+  new Promise((resolve, reject) => {
+    if (!file || !file.type?.startsWith('image/')) {
+      reject(new Error('Please choose an image file.'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Could not read that image.'))
+    reader.onload = () => {
+      const image = new Image()
+      image.onerror = () => reject(new Error('Could not open that image.'))
+      image.onload = () => {
+        const max = 1400
+        const scale = Math.min(1, max / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(image.width * scale))
+        canvas.height = Math.max(1, Math.round(image.height * scale))
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      image.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  })
+
+const readPinnedMessages = (chatId) => {
+  if (!chatId) return []
+  try {
+    const value = JSON.parse(window.localStorage.getItem(`cw-pinned-msgs:${chatId}`) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch {
+    return []
+  }
+}
+
 const MUTE_OPTIONS = [
   { label: '8 hours', value: 8 * 60 * 60 * 1000 },
   { label: '1 week', value: 7 * 24 * 60 * 60 * 1000 },
@@ -77,6 +115,7 @@ const MUTE_OPTIONS = [
 ]
 
 const WALLPAPERS = [
+  { id: 'custom', label: 'My Photo', style: null, custom: true },
   { id: 'default', label: 'Dots', style: null },
   {
     id: 'midnight',
@@ -102,6 +141,61 @@ const WALLPAPERS = [
       backgroundColor: '#120a12',
       backgroundImage:
         'radial-gradient(700px 420px at 100% 0%, rgba(244,114,182,0.18), transparent 65%), radial-gradient(600px 420px at 0% 100%, rgba(124,92,255,0.14), transparent 60%)',
+    },
+  },
+  {
+    id: 'ocean',
+    label: 'Ocean',
+    style: {
+      backgroundColor: '#06121e',
+      backgroundImage:
+        'radial-gradient(800px 500px at 10% 0%, rgba(14,165,233,0.18), transparent 60%), radial-gradient(700px 500px at 90% 100%, rgba(16,185,129,0.12), transparent 60%)',
+    },
+  },
+  {
+    id: 'forest',
+    label: 'Forest',
+    style: {
+      backgroundColor: '#07150f',
+      backgroundImage:
+        'radial-gradient(700px 500px at 0% 0%, rgba(52,211,153,0.16), transparent 65%), radial-gradient(650px 500px at 100% 100%, rgba(132,204,22,0.12), transparent 60%)',
+    },
+  },
+  {
+    id: 'sunset',
+    label: 'Sunset',
+    style: {
+      backgroundColor: '#1a0d0d',
+      backgroundImage:
+        'radial-gradient(750px 480px at 80% 0%, rgba(251,146,60,0.2), transparent 65%), radial-gradient(700px 500px at 10% 100%, rgba(236,72,153,0.16), transparent 60%)',
+    },
+  },
+  {
+    id: 'nebula',
+    label: 'Nebula',
+    style: {
+      backgroundColor: '#080715',
+      backgroundImage:
+        'radial-gradient(500px 400px at 30% 20%, rgba(168,85,247,0.22), transparent 70%), radial-gradient(450px 350px at 75% 75%, rgba(56,189,248,0.18), transparent 70%), radial-gradient(2px 2px at 60% 30%, rgba(255,255,255,0.45), transparent 100%)',
+    },
+  },
+  {
+    id: 'grid',
+    label: 'Grid',
+    style: {
+      backgroundColor: '#0b0e16',
+      backgroundImage:
+        'linear-gradient(rgba(124,92,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(124,92,255,0.08) 1px, transparent 1px)',
+      backgroundSize: '28px 28px',
+    },
+  },
+  {
+    id: 'golden',
+    label: 'Golden',
+    style: {
+      backgroundColor: '#151007',
+      backgroundImage:
+        'radial-gradient(700px 450px at 15% 10%, rgba(251,191,36,0.16), transparent 65%), radial-gradient(650px 450px at 85% 90%, rgba(245,158,11,0.12), transparent 60%)',
     },
   },
 ]
@@ -148,10 +242,16 @@ export default function ChatWindow({
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [starredOpen, setStarredOpen] = useState(false)
+  const [pinnedMessageIds, setPinnedMessageIds] = useState([])
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
   const [muteOpen, setMuteOpen] = useState(false)
   const [wallpaperOpen, setWallpaperOpen] = useState(false)
   const [mutedUntil, setMutedUntil] = useState(null)
   const [wallpaper, setWallpaper] = useState('default')
+  const [customWallpaper, setCustomWallpaper] = useState(null)
+  const [customBusy, setCustomBusy] = useState(false)
+  const customInputRef = useRef(null)
   const [toast, setToast] = useState('')
   const messageCount = chat?.messages.length ?? 0
   const lastMessageId = chat?.messages[chat.messages.length - 1]?.id
@@ -177,6 +277,12 @@ export default function ChatWindow({
     setWallpaper(
       chat?.id ? window.localStorage.getItem(`cw-wallpaper:${chat.id}`) || 'default' : 'default'
     )
+    setCustomWallpaper(
+      chat?.id ? window.localStorage.getItem(`cw-wallpaper-custom:${chat.id}`) : null
+    )
+    setPinnedMessageIds(readPinnedMessages(chat?.id))
+    setSelectMode(false)
+    setSelectedIds([])
   }, [chat?.id])
 
   useEffect(() => {
@@ -200,6 +306,77 @@ export default function ChatWindow({
   const showToast = (message) => {
     setToast(message)
     window.setTimeout(() => setToast(''), 2800)
+  }
+
+  const togglePinnedMessage = (message) => {
+    if (!chat?.id || message.deleted) return
+    setPinnedMessageIds((prev) => {
+      const next = prev.includes(message.id)
+        ? prev.filter((id) => id !== message.id)
+        : [message.id, ...prev].slice(0, 5)
+      try {
+        window.localStorage.setItem(`cw-pinned-msgs:${chat.id}`, JSON.stringify(next))
+      } catch {}
+      return next
+    })
+    showToast(pinnedMessageIds.includes(message.id) ? 'Message unpinned' : 'Message pinned')
+  }
+
+  const scrollToMessage = (id) => {
+    const node = document.getElementById(`message-${id}`)
+    if (node) node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
+  const handleSelectToggle = (message) => {
+    if (message.deleted) return
+    if (!selectMode) {
+      setSelectMode(true)
+      setSelectedIds([message.id])
+      return
+    }
+    setSelectedIds((prev) =>
+      prev.includes(message.id) ? prev.filter((id) => id !== message.id) : [...prev, message.id]
+    )
+  }
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedIds([])
+  }
+
+  const selectedMessages = (chat?.messages || []).filter((message) => selectedIds.includes(message.id))
+
+  const deleteSelectedMessages = async () => {
+    const targets = selectedMessages
+    exitSelectMode()
+    await Promise.all(targets.map((message) => onDeleteMessage?.(message, false)))
+  }
+
+  const forwardSelectedMessages = () => {
+    if (!selectedMessages.length) return
+    const targets = selectedMessages
+    exitSelectMode()
+    onForward?.({ ...targets[0], bulk: targets })
+  }
+
+  const handleCustomWallpaper = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !chat?.id) return
+    setCustomBusy(true)
+    try {
+      const dataUrl = await readWallpaperFile(file)
+      window.localStorage.setItem(`cw-wallpaper-custom:${chat.id}`, dataUrl)
+      window.localStorage.setItem(`cw-wallpaper:${chat.id}`, 'custom')
+      setCustomWallpaper(dataUrl)
+      setWallpaper('custom')
+      setWallpaperOpen(false)
+      showToast('Your photo is now the wallpaper')
+    } catch (error) {
+      showToast(error?.message || 'Could not set that photo')
+    } finally {
+      setCustomBusy(false)
+    }
   }
 
   const applyMute = (value) => {
@@ -335,7 +512,20 @@ export default function ChatWindow({
         ? 'online'
         : formatLastSeen(chat.lastSeen)
 
-  const wallpaperPreset = WALLPAPERS.find((item) => item.id === wallpaper) || WALLPAPERS[0]
+  const wallpaperPreset =
+    wallpaper === 'custom' && customWallpaper
+      ? {
+          id: 'custom',
+          label: 'My Photo',
+          style: {
+            backgroundColor: '#080911',
+            backgroundImage: `linear-gradient(rgba(6,8,14,0.55), rgba(6,8,14,0.55)), url("${customWallpaper}")`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          },
+        }
+      : WALLPAPERS.find((item) => item.id === wallpaper) || WALLPAPERS[0]
   const query = searchQuery.trim().toLowerCase()
   const results = query
     ? chat.messages
@@ -347,6 +537,9 @@ export default function ChatWindow({
     (message) => starredIds?.has(message.id) && !message.deleted
   )
   const starredCount = starredMessages.length
+  const pinnedMessages = pinnedMessageIds
+    .map((id) => chat.messages.find((message) => message.id === id))
+    .filter((message) => message && !message.deleted)
 
   const timeline = []
   let lastDay = ''
@@ -643,6 +836,79 @@ export default function ChatWindow({
         </div>
       )}
 
+      {selectMode && (
+        <div className="animate-slide-down flex shrink-0 items-center gap-2 border-b border-white/[0.06] bg-[#0d1019]/95 px-3 py-2 backdrop-blur">
+          <button type="button" onClick={exitSelectMode} className="icon-btn" aria-label="Cancel selection">
+            <X size={17} />
+          </button>
+          <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-wa-text">
+            {selectedIds.length} selected
+          </span>
+          <button
+            type="button"
+            onClick={forwardSelectedMessages}
+            disabled={!selectedIds.length}
+            className="flex items-center gap-1.5 rounded-xl bg-white/[0.06] px-2.5 py-1.5 text-[11.5px] font-medium text-wa-text transition-colors hover:bg-white/[0.12] disabled:opacity-40"
+          >
+            <Forward size={14} />
+            Forward
+          </button>
+          <button
+            type="button"
+            onClick={deleteSelectedMessages}
+            disabled={!selectedIds.length}
+            className="flex items-center gap-1.5 rounded-xl bg-red-500/15 px-2.5 py-1.5 text-[11.5px] font-semibold text-red-300 transition-colors hover:bg-red-500/25 disabled:opacity-40"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+        </div>
+      )}
+
+      {pinnedMessages.length > 0 && (
+        <div className="animate-slide-down shrink-0 border-b border-white/[0.06] bg-[#0d1019]/90 px-2 py-1.5 backdrop-blur">
+          {pinnedMessages.map((message) => (
+            <div
+              key={message.id}
+              className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/[0.04]"
+            >
+              <button
+                type="button"
+                onClick={() => scrollToMessage(message.id)}
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+              >
+                <Pin size={14} className="shrink-0 rotate-45 text-wa-green" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[11.5px] font-semibold text-wa-text">
+                    {message.from === 'me'
+                      ? 'You'
+                      : chat.members?.find((member) => member.id === message.senderId)?.name ||
+                        'Member'}
+                  </span>
+                  <span className="block truncate text-[11px] text-wa-muted">
+                    {message.text ||
+                      (message.imageUrl
+                        ? 'Photo'
+                        : message.fileUrl
+                          ? message.fileName || 'Attachment'
+                          : 'Message')}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => togglePinnedMessage(message)}
+                className="icon-btn shrink-0"
+                aria-label="Unpin message"
+                title="Unpin"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div
         ref={scrollRef}
         onScroll={() => {
@@ -701,7 +967,12 @@ export default function ChatWindow({
               }}
               onDelete={onDeleteMessage}
               onStar={onStarMessage}
+              onPin={togglePinnedMessage}
+              selectMode={selectMode}
+              selected={selectedIds.includes(message.id)}
+              onSelectToggle={handleSelectToggle}
               starred={starredIds?.has(message.id)}
+              pinned={pinnedMessageIds.includes(message.id)}
               replyTo={replyMap[message.replyTo] || null}
               replyAuthorName={authorNameOf(replyMap[message.replyTo])}
               senderName={
@@ -998,11 +1269,16 @@ export default function ChatWindow({
                     key={item.id}
                     type="button"
                     onClick={() => {
+                      if (item.custom) {
+                        customInputRef.current?.click()
+                        return
+                      }
                       setWallpaper(item.id)
                       if (chat?.id) {
                         window.localStorage.setItem(`cw-wallpaper:${chat.id}`, item.id)
                       }
                       showToast(`Wallpaper set to ${item.label}`)
+                      setWallpaperOpen(false)
                     }}
                     className={`group relative h-24 overflow-hidden rounded-2xl border transition-all ${
                       wallpaper === item.id
@@ -1010,17 +1286,38 @@ export default function ChatWindow({
                         : 'border-white/10 hover:border-white/25'
                     }`}
                   >
-                    <span
-                      className="absolute inset-0 bg-[#101322] chat-wallpaper"
-                      style={item.style || undefined}
-                    />
+                    {item.custom ? (
+                      <span className="absolute inset-0 grid place-items-center bg-[#101322]">
+                        {customWallpaper ? (
+                          <img
+                            src={customWallpaper}
+                            alt="Your wallpaper"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <ImagePlus size={22} className="text-wa-muted" />
+                        )}
+                      </span>
+                    ) : (
+                      <span
+                        className="absolute inset-0 bg-[#101322] chat-wallpaper"
+                        style={item.style || undefined}
+                      />
+                    )}
                     <span className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/45 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm">
-                      {item.label}
+                      {item.custom && customBusy ? 'Adding...' : item.label}
                       {wallpaper === item.id && <Check size={13} className="text-wa-green" />}
                     </span>
                   </button>
                 ))}
               </div>
+              <input
+                ref={customInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleCustomWallpaper}
+              />
             </div>
           </div>,
           document.body

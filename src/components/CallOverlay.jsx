@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { Mic, MicOff, Phone, PhoneOff, SwitchCamera, Video } from 'lucide-react'
+import {
+  Mic,
+  MicOff,
+  Phone,
+  PhoneOff,
+  ChevronDown,
+  ScreenShare,
+  Sparkles,
+  SwitchCamera,
+  Video,
+  X,
+} from 'lucide-react'
+import Avatar from '@/components/Avatar'
+import { VIDEO_FILTERS, filterCss } from '@/lib/filters'
 
 const formatDuration = (total) => {
   const minutes = Math.floor(total / 60)
@@ -36,6 +49,25 @@ function CallAvatar({ name, src, color }) {
   )
 }
 
+function DockButton({ icon: Icon, label, onClick, active = false, danger = false }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-[62px] flex-col items-center gap-1.5">
+      <span
+        className={`grid h-12 w-12 place-items-center rounded-full transition-all duration-200 hover:scale-105 active:scale-95 ${
+          danger
+            ? 'bg-red-500 shadow-[0_12px_30px_-8px_rgba(239,68,68,0.8)]'
+            : active
+              ? 'bg-emerald-400/25 text-emerald-100 ring-1 ring-emerald-300/60'
+              : 'bg-white/10 hover:bg-white/20'
+        }`}
+      >
+        <Icon size={20} />
+      </span>
+      <span className="text-[10px] text-white/70">{label}</span>
+    </button>
+  )
+}
+
 export default function CallOverlay({
   incoming,
   call,
@@ -43,37 +75,63 @@ export default function CallOverlay({
   remoteStream,
   facingMode,
   remoteFacingMode,
+  videoFilter = 'none',
+  remoteFilter = 'none',
+  screenSharing = false,
+  remoteSharing = false,
+  minimized = false,
   notice,
+  onMinimize,
+  onRestore,
   onAccept,
   onDecline,
   onEnd,
   onToggleMute,
   onSwitchCamera,
+  onToggleScreenShare,
+  onFilterChange,
 }) {
   const remoteVideoRef = useRef(null)
   const remoteAudioRef = useRef(null)
   const localVideoRef = useRef(null)
   const [now, setNow] = useState(() => Date.now())
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  const sharingRemote = Boolean(remoteSharing || call?.remoteSharing)
+  const showVideo = Boolean(call?.withVideo || screenSharing || sharingRemote)
 
   useEffect(() => {
     if (!remoteStream) return
-    const node = call?.withVideo ? remoteVideoRef.current : remoteAudioRef.current
+    const node = showVideo ? remoteVideoRef.current : remoteAudioRef.current
     if (node) {
       node.srcObject = remoteStream
       if ('playoutDelayHint' in node) node.playoutDelayHint = 0
     }
-  }, [remoteStream, call?.withVideo])
+  }, [remoteStream, showVideo, minimized])
 
   useEffect(() => {
-    if (!localStream || !call?.withVideo || !localVideoRef.current) return
+    if (!localStream || !showVideo || !localVideoRef.current) return
     localVideoRef.current.srcObject = localStream
-  }, [localStream, call?.withVideo])
+  }, [localStream, showVideo, minimized])
+
+  useEffect(() => {
+    setFiltersOpen(false)
+  }, [call?.callId])
 
   useEffect(() => {
     if (!call?.startedAt) return undefined
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
   }, [call?.startedAt])
+
+  useEffect(() => {
+    if (!filtersOpen) return undefined
+    const onKey = (event) => {
+      if (event.key === 'Escape') setFiltersOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [filtersOpen])
 
   const active = Boolean(call || incoming)
   useEffect(() => {
@@ -115,19 +173,24 @@ export default function CallOverlay({
           </p>
 
           <div className="flex flex-col items-center gap-5 text-center">
-            <div className="relative grid place-items-center">
-              <span className="absolute h-56 w-56 animate-ping rounded-full bg-emerald-400/10" />
-              <span className="absolute h-44 w-44 rounded-full border border-emerald-300/15" />
-              <CallAvatar
-                name={incoming.peerName}
-                src={incoming.avatarUrl}
-                color={incoming.avatarColor}
-              />
+            <div className="relative grid place-items-center max-sm:-translate-y-4">
+              <span className="call-ripple pointer-events-none absolute h-40 w-40 rounded-full border-2 border-emerald-300/45" />
+              <span className="call-ripple-late pointer-events-none absolute h-40 w-40 rounded-full border-2 border-emerald-300/35" />
+              <span className="call-ring pointer-events-none absolute h-44 w-44 rounded-full border border-emerald-300/20" />
+              <div className="call-avatar-float">
+                <CallAvatar
+                  name={incoming.peerName}
+                  src={incoming.avatarUrl}
+                  color={incoming.avatarColor}
+                />
+              </div>
             </div>
             <h2 className="text-[30px] font-medium tracking-tight">{incoming.peerName}</h2>
             <p className="flex items-center gap-1.5 text-[13px] text-emerald-100/70">
               {incoming.withVideo ? <Video size={15} /> : <Mic size={15} />}
-              Incoming {incoming.withVideo ? 'video' : 'voice'} call...
+              <span className="animate-pulse">
+                Incoming {incoming.withVideo ? 'video' : 'voice'} call...
+              </span>
             </p>
           </div>
 
@@ -148,46 +211,98 @@ export default function CallOverlay({
         </div>
       )}
 
-      {call && (
+      {call && minimized && (
+        <div className="animate-slide-down fixed inset-x-0 top-2 z-[125] mx-auto flex max-w-md items-center gap-2 rounded-2xl border border-emerald-300/25 bg-[#101820]/95 px-2.5 py-2 shadow-2xl backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={onRestore}
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+          >
+            <Avatar
+              name={call.peerName}
+              color={call.avatarColor}
+              src={call.avatarUrl}
+              size="sm"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[12.5px] font-semibold text-white">
+                {call.peerName}
+              </span>
+              <span className="block text-[10.5px] text-emerald-200/70">
+                {screenSharing
+                  ? 'Sharing screen'
+                  : call.phase === 'connected'
+                    ? `In call • ${formatDuration(seconds)}`
+                    : call.phase === 'calling'
+                      ? 'Calling...'
+                      : 'Connecting...'}
+              </span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={onRestore}
+            className="rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white/80 transition-colors hover:bg-white/20"
+          >
+            Open
+          </button>
+          <button
+            type="button"
+            onClick={onEnd}
+            className="grid h-8 w-8 place-items-center rounded-full bg-red-500 text-white transition-transform hover:scale-105"
+            aria-label="End call"
+          >
+            <PhoneOff size={15} />
+          </button>
+        </div>
+      )}
+
+      {call && !minimized && (
         <div
           className={`animate-fade-in fixed inset-0 z-[120] flex flex-col items-center justify-center gap-8 px-6 py-10 text-white ${callBackground}`}
         >
+          <button
+            type="button"
+            onClick={onMinimize}
+            className="absolute left-4 top-4 z-20 flex items-center gap-1 rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white/80 backdrop-blur transition-colors hover:bg-white/20"
+            aria-label="Minimize call"
+          >
+            <ChevronDown size={15} />
+            Minimize
+          </button>
           <p
             className={`text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/60 ${
-              call.withVideo ? 'max-sm:hidden' : ''
+              showVideo ? 'max-sm:hidden' : ''
             }`}
           >
             {call.role === 'caller' ? 'Calling' : 'In call'}
           </p>
 
-          {call.withVideo && (
+          {showVideo && (
             <div className="relative w-full max-w-3xl max-sm:fixed max-sm:inset-0 max-sm:z-0">
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className={`max-h-[64vh] w-full rounded-3xl bg-black object-contain shadow-2xl max-sm:h-full max-sm:max-h-none max-sm:w-full max-sm:rounded-none max-sm:object-cover max-sm:shadow-none ${
-                  remoteFacingMode === 'user' ? '-scale-x-100' : ''
+                style={{ filter: sharingRemote ? 'none' : filterCss(remoteFilter) }}
+                className={`max-h-[64vh] w-full rounded-3xl bg-black object-contain shadow-2xl transition-[filter] duration-300 max-sm:h-full max-sm:max-h-none max-sm:w-full max-sm:rounded-none max-sm:object-cover max-sm:shadow-none ${
+                  remoteFacingMode === 'user' && !screenSharing && !sharingRemote
+                    ? '-scale-x-100'
+                    : ''
                 }`}
               />
-              {localStream && (
-                <div className="absolute bottom-3 right-3 flex flex-col items-end gap-2 max-sm:bottom-24">
-                  <button
-                    type="button"
-                    onClick={onSwitchCamera}
-                    className="grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-black/55 text-white/90 backdrop-blur transition hover:bg-black/75 active:scale-95"
-                    aria-label="Switch camera"
-                    title="Switch camera"
-                  >
-                    <SwitchCamera size={17} />
-                  </button>
+              {localStream && localStream.getVideoTracks().length > 0 && (
+                <div className="absolute bottom-28 right-3 max-sm:bottom-36">
                   <video
                     ref={localVideoRef}
                     autoPlay
                     playsInline
                     muted
-                    className={`h-28 w-20 rounded-xl border border-white/15 bg-black object-cover shadow-lg max-sm:h-36 max-sm:w-24 ${
-                      facingMode === 'user' ? '-scale-x-100' : ''
+                    style={{ filter: screenSharing ? 'none' : filterCss(videoFilter) }}
+                    className={`h-28 w-20 rounded-xl border border-white/15 bg-black object-cover shadow-lg transition-[filter] duration-300 max-sm:h-36 max-sm:w-24 ${
+                      facingMode === 'user' && !screenSharing && !sharingRemote
+                        ? '-scale-x-100'
+                        : ''
                     }`}
                   />
                 </div>
@@ -195,52 +310,108 @@ export default function CallOverlay({
             </div>
           )}
 
-          {!call.withVideo && (
+          {!showVideo && (
             <>
               {remoteStream && <audio ref={remoteAudioRef} autoPlay playsInline />}
               <div className="relative grid place-items-center">
-                <span className="absolute h-44 w-44 rounded-full border border-emerald-300/10" />
-                <CallAvatar
-                  name={call.peerName}
-                  src={call.avatarUrl}
-                  color={call.avatarColor}
-                />
+                {call.phase === 'calling' && (
+                  <>
+                    <span className="call-ripple pointer-events-none absolute h-36 w-36 rounded-full border-2 border-emerald-300/45" />
+                    <span className="call-ripple-late pointer-events-none absolute h-36 w-36 rounded-full border-2 border-emerald-300/35" />
+                  </>
+                )}
+                <span className="call-ring pointer-events-none absolute h-44 w-44 rounded-full border border-emerald-300/10" />
+                <div className={call.phase === 'calling' ? 'call-avatar-float' : undefined}>
+                  <CallAvatar
+                    name={call.peerName}
+                    src={call.avatarUrl}
+                    color={call.avatarColor}
+                  />
+                </div>
               </div>
             </>
           )}
 
-          <div className="text-center max-sm:absolute max-sm:bottom-28 max-sm:left-0 max-sm:right-0 max-sm:z-10">
+          <div className="text-center max-sm:absolute max-sm:bottom-[7.8rem] max-sm:left-0 max-sm:right-0 max-sm:z-10">
             <h2 className="text-[26px] font-medium tracking-tight drop-shadow-lg">{call.peerName}</h2>
             <p className="mt-1 text-[13px] text-emerald-100/70">
-              {call.phase === 'connected'
-                ? formatDuration(seconds)
-                : call.phase === 'calling'
-                  ? 'Ringing...'
-                  : 'Connecting...'}
+              {screenSharing
+                ? 'Sharing your screen'
+                : call.phase === 'connected'
+                  ? formatDuration(seconds)
+                  : call.phase === 'calling'
+                    ? <span className="animate-pulse">Ringing...</span>
+                    : 'Connecting...'}
             </p>
           </div>
 
-          <div className="flex w-full max-w-xs items-start justify-center gap-16 max-sm:absolute max-sm:bottom-8 max-sm:left-1/2 max-sm:z-10 max-sm:-translate-x-1/2">
-            <button
-              type="button"
+          {filtersOpen && call.withVideo && (
+            <div className="animate-pop-in absolute bottom-36 left-1/2 z-20 w-[min(92vw,400px)] -translate-x-1/2 rounded-2xl border border-white/10 bg-[#0d1218]/95 p-3 shadow-2xl backdrop-blur-xl max-sm:bottom-44">
+              <div className="flex items-center justify-between px-1 pb-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200/70">
+                  Fun filters
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(false)}
+                  className="text-white/60 transition-colors hover:text-white"
+                  aria-label="Close filters"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {VIDEO_FILTERS.map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    onClick={() => onFilterChange(filter.id)}
+                    className={`flex items-center gap-2 rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${
+                      videoFilter === filter.id
+                        ? 'border-emerald-300/60 bg-emerald-400/15 text-emerald-100'
+                        : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                    }`}
+                  >
+                    <span
+                      className="h-5 w-5 rounded-full bg-gradient-to-br from-emerald-300 via-sky-300 to-fuchsia-400"
+                      style={{ filter: filter.css }}
+                    />
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-start justify-center gap-2 rounded-3xl border border-white/10 bg-black/35 px-4 py-3 backdrop-blur-xl max-sm:absolute max-sm:bottom-5 max-sm:left-1/2 max-sm:z-20 max-sm:-translate-x-1/2">
+            <DockButton
+              icon={call.muted ? MicOff : Mic}
+              label={call.muted ? 'Unmute' : 'Mute'}
               onClick={onToggleMute}
-              className="flex flex-col items-center gap-2"
-            >
-              <span
-                className={`grid h-14 w-14 place-items-center rounded-full transition-transform hover:scale-105 ${
-                  call.muted ? 'bg-white/20' : 'bg-white/10'
-                }`}
-              >
-                {call.muted ? <MicOff size={22} /> : <Mic size={22} />}
-              </span>
-              <span className="text-[12px] text-white/70">{call.muted ? 'Unmute' : 'Mute'}</span>
-            </button>
-            <button type="button" onClick={onEnd} className="flex flex-col items-center gap-2">
-              <span className="grid h-14 w-14 place-items-center rounded-full bg-red-500 shadow-[0_12px_30px_-8px_rgba(239,68,68,0.8)] transition-transform hover:scale-105">
-                <PhoneOff size={22} />
-              </span>
-              <span className="text-[12px] text-white/70">End</span>
-            </button>
+              active={call.muted}
+            />
+            {call.withVideo && !screenSharing && (
+              <>
+                <DockButton
+                  icon={SwitchCamera}
+                  label="Camera"
+                  onClick={onSwitchCamera}
+                />
+                <DockButton
+                  icon={Sparkles}
+                  label="Filters"
+                  onClick={() => setFiltersOpen((open) => !open)}
+                  active={filtersOpen}
+                />
+              </>
+            )}
+            <DockButton
+              icon={ScreenShare}
+              label={screenSharing ? 'Stop share' : 'Share'}
+              onClick={onToggleScreenShare}
+              active={screenSharing}
+            />
+            <DockButton icon={PhoneOff} label="End" onClick={onEnd} danger />
           </div>
         </div>
       )}
