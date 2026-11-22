@@ -23,11 +23,11 @@ export async function handleAI({ method, body }) {
   if (!messages.length) return { statusCode: 400, body: 'No message' }
 
   const guard =
-    'CRITICAL: Answer ONLY from the ChatWave app context below. ChatWave definitely HAS wallpapers (chat ⋮ → Chat wallpaper: 11 presets + My Photo upload), groups, calls, filters, pinned messages, multi-select and all the listed settings. Never claim a listed feature is missing.'
+    'Use the ChatWave context below for app questions. For every other topic, answer normally and helpfully in friendly Hinglish — never refuse and never say the topic is unsupported. ChatWave definitely HAS wallpapers (chat ⋮ → Chat wallpaper: 11 presets + My Photo upload), groups, calls, filters, pinned messages, multi-select and all the listed settings. Never claim a listed feature is missing.'
   const context = `${guard}\n\n${AI_CONTEXT}\n\n${guard}`
   const conversation = messages.map((item, index) =>
     index === messages.length - 1 && item.role === 'user'
-      ? { ...item, content: `${item.content}\n\n(Use the ChatWave app context above.)` }
+      ? { ...item, content: `${item.content}\n\n(Use the ChatWave context when relevant, otherwise answer normally.)` }
       : item
   )
 

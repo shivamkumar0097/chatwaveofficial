@@ -22,6 +22,18 @@ const KNOWLEDGE = [
     related: ['features', 'help'],
   },
   {
+    id: 'contact-developer',
+    keys: ['contact', 'contact kare', 'kaise contact', 'sanse mpark', 'reach', 'message kare', 'contact details', 'portfolio contact', 'jawab de'],
+    answers: [
+      'Sabse aasan tarika: unki portfolio kholo — shivamkumar0097.netlify.app — neeche scroll karo, contact section mil jayega. Wahi se message kar sakte ho.',
+      'Portfolio ke bottom me contact section hai, bas thoda scroll karna padega: shivamkumar0097.netlify.app',
+      'Professional baat ho to LinkedIn se message kar sakte ho, code-related ho to GitHub. Dono links portfolio me hain.',
+      'Unki portfolio site ke neeche contact options diye hain — wahi se direct reach kar sakte ho: shivamkumar0097.netlify.app',
+    ],
+    extra: 'Portfolio: shivamkumar0097.netlify.app • LinkedIn: linkedin.com/in/shivamkumar0097/ • GitHub: github.com/shivamkumar0097',
+    related: ['developer', 'help'],
+  },
+  {
     id: 'features',
     keys: ['features', 'sab features', 'poora', 'pura', 'ek ek', 'saare', 'list', 'sab kuch'],
     answer: `Poori ChatWave ek nazar me:
@@ -619,7 +631,7 @@ const replyFor = (text, lastTopic) => {
       bestScore = score
     }
   }
-  if (best) return { text: best.answer, topic: best }
+  if (best) return { text: best.answers ? pick(best.answers) : best.answer, topic: best }
   const suggestions = KNOWLEDGE.slice(0, 4).map((item) => item.keys[0]).join(', ')
   return {
     text: pick([
@@ -727,8 +739,8 @@ export default function HelpAIModal({ onClose }) {
               {liveMode === true
                 ? 'Groq AI live · app ka har detail'
                 : liveMode === false
-                  ? 'Offline guide · app ka har detail'
-                  : 'App ke baare me kuch bhi poocho'}
+                  ? 'Offline guide · Everything about ChatWave'
+                  : 'Ask Anything About ChatWave App'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="icon-btn" aria-label="Close AI help">
