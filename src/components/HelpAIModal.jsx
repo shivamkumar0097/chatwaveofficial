@@ -10,7 +10,16 @@ const KNOWLEDGE = [
       'Main ChatWave AI hoon — aapka in-app guide. Mujhe pure app ki har feature, har button aur har setting pata hai. Koi bhi topic likho, ya niche chips dabao. "Aur detail" likhkar pehle jawab ka zyada vivid varan mil sakta hai.',
     extra:
       'Main offline kaam karta hoon — koi API key, internet ya cost nahi. Try karo: "shortcuts", "wallpaper", "group members", "screen share", "settings".',
-    related: ['features', 'settings', 'shortcuts'],
+    related: ['features', 'settings', 'shortcuts', 'developer'],
+  },
+  {
+    id: 'developer',
+    keys: ['developer', 'shivam', 'creator', 'banaya', 'who made', 'portfolio', 'github', 'linkedin', 'aapne', 'aap kaun'],
+    answer:
+      'ChatWave Shivam Kumar ne banaya — ek developer jo polished, real-world web products banate hain. Unhone ChatWave scratch se sirf 1 week me complete kiya: frontend, realtime chat, audio/video calls, groups, wallpapers, notifications, PWA aur backend sab khud handle kiya. Ye app isliye banaya taaki doosre log ek quality chat app use kar sakein aur unki capability ek kaam karne wale product se pata chale.',
+    extra:
+      'GitHub: github.com/shivamkumar0097 · LinkedIn: linkedin.com/in/shivamkumar0097 · Portfolio: shivamkumar0097.netlify.app. Unka focus clean design, smooth UX aur actually kaam karne wali features par hai.',
+    related: ['features', 'help'],
   },
   {
     id: 'features',
@@ -438,7 +447,7 @@ Status 24 ghante baad expire ho jate hain.`,
 8. Haptic feedback
 9. Reduce motion
 10. Help & AI
-Neeche "Signed in as <email>", "ChatWave - v0.1" aur Log out button. Preferences is device par auto save hote hain.`,
+Neeche "Signed in as <email>", "ChatWave - v2.0" aur Log out button. Preferences is device par auto save hote hain.`,
     extra:
       'Har row ka toggle details neeche diye gaye topics me milta hai — jaise "screen lock", "theme", "push", "haptics". Koi bhi poocho.',
     related: ['screen-lock', 'theme', 'notifications-settings', 'help'],
@@ -540,13 +549,53 @@ const ALL_FEATURES = `Poori ChatWave — ek-ek karke (default 1 se 55 tak topics
 10. Profile & Settings: name/username/avatar/color/bio, QR, screen lock PIN, light theme, push, sounds, desktop notifications, read receipts, haptics, reduce motion, Help & AI.
 11. Auth: 3-step signup, terms, username check, password strength, theme.
 12. PWA install, offline shell, keyboard shortcuts, back gesture, toasts.
+13. Developer: Shivam Kumar — GitHub, LinkedIn, Portfolio, bio aur ChatWave ka 1-week backstory.
 
 Koi bhi upar wale topic ka naam likho — detail se bataunga. "Aur" likhkar pehle jawab ka extended version milta hai.`
 
-const QUICK = ['Sab features', 'Settings', 'Wallpaper', 'Groups', 'Calls', 'Pinned', 'Multi-select', 'Shortcuts']
+const QUICK = ['Features', 'Settings', 'Wallpaper', 'Groups', 'Calls', 'Pinned', 'Multi-select', 'Shortcuts']
+
+const pick = (items) => items[Math.floor(Math.random() * items.length)]
+
+const smallTalk = (query) => {
+  if (/\b(hello|hi|hey|namaste|good morning|good afternoon|good evening)\b/.test(query))
+    return pick([
+      'Namaste! 👋 Main yahin hoon — bataiye, aaj kya janna hai?',
+      'Hey! 👋 Mujhe poochhiye jo bhi mann hai — app ho ya general koi topic.',
+      'Hello! Main ready hoon. Koi bhi sawaal, koi bhi topic — shuru karein.',
+    ])
+  if (/\b(thank|thanks|shukriya|dhanyavaad)\b/.test(query))
+    return pick([
+      'Koi baat nahi! Aur madad chahiye to main yahin hoon.',
+      'Welcome! Aapka sawaal achha tha, phir se poochhne me jhijhak mat karein.',
+      'Glad to help! Koi aur topic try karein.',
+    ])
+  if (/\b(how are you|kaise ho|kya haal)\b/.test(query))
+    return pick([
+      'Main bilkul theek hoon, aur aapki madad ke liye ready!',
+      'Sab badhiya! Aap bataiye, kis topic par baat karni hai?',
+      'I am good, thanks! Aaj kya seekhna chahte hain?',
+    ])
+  if (/\b(time|samay|date|tarikh)\b/.test(query)) {
+    const now = new Date()
+    return pick([
+      `Abhi ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })} hai, aur aaj ${now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })} hai.`,
+      `Time dekh liya — ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}, ${now.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short' })}.`,
+    ])
+  }
+  if (/\b(joke|mazaak|hasao)\b/.test(query))
+    return pick([
+      'Suno: Developer ne app 1 week me banayi… aur uske baad poocha, "ab AI bhi bana dete hain?" — main yahin hoon! 😄',
+      'Ek chhoti si: Main itna smart hoon ki apna code khud nahi likh sakta… par aapki madad zaroor kar sakta hoon! 😄',
+      'Why did the developer go to the coffee shop? To debug his day! ☕😄',
+    ])
+  return null
+}
 
 const replyFor = (text, lastTopic) => {
   const query = ` ${text.toLowerCase().trim().replace(/[^\w@]+/g, ' ')} `
+  const small = smallTalk(query)
+  if (small) return { text: small, topic: null }
   if (/\b(sab|saare|all|poora|pura|features|ek ek|list|saare|kuch bhi)\b/.test(query)) return { text: ALL_FEATURES, topic: 'features' }
   if (/\b(aur|more|detail|details|further|zyda|zyada)\b/.test(query) && lastTopic) {
     return {
@@ -573,7 +622,11 @@ const replyFor = (text, lastTopic) => {
   if (best) return { text: best.answer, topic: best }
   const suggestions = KNOWLEDGE.slice(0, 4).map((item) => item.keys[0]).join(', ')
   return {
-    text: `Ye topic mujhe abhi nahi pata. Niche diye gaye topics try karo: ${suggestions}. Ya "Sab features" likho — poori list mil jayegi.`,
+    text: pick([
+      `Is topic par abhi itna detail nahi hai — par aap chhoti baat kar sakte ho. ChatWave ke baare me poochhna ho to: ${suggestions}.`,
+      `Ye mujhe abhi theek se nahi pata. Koi aur topic try karein, ya app se related kuch poochhein — ${suggestions}.`,
+      `Main isme abhi limited hoon. Live Groq AI ke saath aap padhai/news/koi bhi topic freely poochh sakte ho. App ke liye: ${suggestions}.`,
+    ]),
     topic: null,
   }
 }
@@ -590,7 +643,7 @@ export default function HelpAIModal({ onClose }) {
     {
       id: 'welcome',
       from: 'bot',
-      text: `${greeting()} 👋 Main ChatWave AI hoon — aapka in-app guide. Har feature, har button aur har setting ka full detail mujhe pata hai. Kuch bhi poocho, ya "Sab features" dabao.`,
+      text: `${greeting()} 👋 Welcome! Main ChatWave AI hoon — aapka in-app assistant. Mujhe is application ki har feature, har button aur har setting ka poora gyaan hai. Aap koi bhi sawaal poochhiye, main jald hi madad karunga.`,
     },
   ])
   const [input, setInput] = useState('')
@@ -753,7 +806,7 @@ export default function HelpAIModal({ onClose }) {
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Apna sawaal likho… (ya 'aur' likho)"
+            placeholder="Ask AI"
             className="min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-[12.5px] outline-none placeholder:text-wa-muted focus:border-wa-green/50"
           />
           <button

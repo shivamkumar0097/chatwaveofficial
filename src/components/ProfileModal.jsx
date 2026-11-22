@@ -728,7 +728,7 @@ export default function ProfileModal({
               )}
 
               <p className="pb-1 text-center text-[10.5px] text-wa-muted/70">
-                ChatWave - v0.1
+                ChatWave - v2.0
               </p>
             </div>
           )}

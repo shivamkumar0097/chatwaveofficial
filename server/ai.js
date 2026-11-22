@@ -22,6 +22,15 @@ export async function handleAI({ method, body }) {
     : []
   if (!messages.length) return { statusCode: 400, body: 'No message' }
 
+  const guard =
+    'CRITICAL: Answer ONLY from the ChatWave app context below. ChatWave definitely HAS wallpapers (chat ⋮ → Chat wallpaper: 11 presets + My Photo upload), groups, calls, filters, pinned messages, multi-select and all the listed settings. Never claim a listed feature is missing.'
+  const context = `${guard}\n\n${AI_CONTEXT}\n\n${guard}`
+  const conversation = messages.map((item, index) =>
+    index === messages.length - 1 && item.role === 'user'
+      ? { ...item, content: `${item.content}\n\n(Use the ChatWave app context above.)` }
+      : item
+  )
+
   try {
     const response = await fetch(GROQ_URL, {
       method: 'POST',
@@ -30,9 +39,9 @@ export async function handleAI({ method, body }) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-        messages: [{ role: 'system', content: AI_CONTEXT }, ...messages],
-        temperature: 0.6,
+        model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
+        messages: [{ role: 'system', content: context }, ...conversation],
+        temperature: 0.2,
         max_tokens: 420,
       }),
     })
