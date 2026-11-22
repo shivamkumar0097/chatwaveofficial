@@ -4,96 +4,256 @@ import { Send, Sparkles, X } from 'lucide-react'
 
 const KNOWLEDGE = [
   {
-    keys: ['group', 'gr ups', 'member', 'add', 'remove', 'leave', 'admin'],
+    keys: ['text', 'message bhej', 'send', 'emoji', 'attachment', 'photo', 'file', 'voice note', 'record'],
     answer:
-      'Group me member add/remove: group kholo → ⋮ → Group members. Admin hi Add search aur Remove button dekh sakta hai (RLS rules). Khud group chhodne ke liye "Leave group" dabao — pehle confirmation aayega. Admin Transfer (crown) aur Delete group bhi yahin hai.',
+      'Message bhejne ke liye composer me type karke Send. Emoji picker, 📎 se photo/file upload, aur mic se voice note record kar sakte ho. Voice note par play karo — swipe reply bhi kaam karta hai.',
   },
   {
-    keys: ['wallpaper', 'background', 'photo', 'theme', 'custom'],
+    keys: ['reply', 'swipe', 'quote'],
     answer:
-      'Wallpaper badalne ke liye chat kholo → ⋮ → Chat wallpaper. 10 ready options hain (Dots, Aurora, Ocean, Forest, Sunset, Nebula, Grid, Golden…). "My Photo" se apni image upload kar sakte ho — compress hoke usi chat me save hoti hai. Select karte hi picker band ho jata hai.',
+      'Kisi message pe long-press (ya right-swipe) → Reply. Reply quote message ke upar dikhta hai. Swipe direction aapke side ke hisaab se hoti hai.',
   },
   {
-    keys: ['call', 'ringing', 'minimize', 'notification', 'back', 'answer', 'decline'],
+    keys: ['edit', 'badlo', 'change text'],
     answer:
-      'Call/Video call: chat header me Phone ya Video icon. Incoming call pe animation + Answer/Decline. Call ke time Back dabao to call minimize ho kar upar banner/system notification me chali jati hai — uspe tap karke wapas aa sakte ho. Call screen me Mute, Camera, Filters, Share, End sab niche dock me hain.',
+      'Apne bheje hue text message ko long-press → Edit message. Edit hone par message ke paas "edited" label dikhta hai. Sirf apne messages edit ho sakte hain.',
   },
   {
-    keys: ['screen', 'share', 'display'],
+    keys: ['delete', 'remove message', 'for everyone', 'for me'],
     answer:
-      'Screen share: call ke bottom dock me "Share" dabao → browser screen picker aayega → "Stop share" se band. Voice aur video dono calls me chalata hai. Screen mirror nahi hota, text seedha dikhta hai.',
+      'Long-press → Delete message. Do options: "Delete for me" (sirf aapke liye) aur "Delete for everyone" (saab ke liye). Multi-select se kai messages ek saath delete bhi kar sakte ho.',
   },
   {
-    keys: ['filter', 'fun', 'video effect', 'neon', 'retro'],
+    keys: ['copy', 'clipboard'],
     answer:
-      'Video call me bottom dock ka "Filters" (✨) kholo — Glow, Retro, Mono, Dreamy, Neon, Noir etc. Filter aapko aur doosre ko bhi dikhta hai. Share karte waqt filter automatically band ho jata hai.',
+      'Text message pe long-press → Copy text. Message copy ho kar clipboard me chala jata hai.',
   },
   {
-    keys: ['pin', 'pinned', 'bar'],
+    keys: ['forward', 'bulk forward'],
     answer:
-      'Message pin: kisi message pe long-press → "Pin message". Pin karte hi chat ke upar (header ke niche) pinned bar dikhega. Uspe tap → us message par scroll; X → unpin. Max 5 pinned messages per chat.',
+      'Long-press → Forward → contact ya group chuno. Kai messages ko select karke bulk forward bhi kar sakte ho — ForwardModal me "N messages" dikhega aur sab ek saath bheje jayenge.',
   },
   {
-    keys: ['multi', 'select', 'bulk', 'delete many', 'forward many'],
+    keys: ['reaction', 'heart', 'double', 'tap', 'love', 'emoji reaction'],
     answer:
-      'Kai messages ek saath: long-press → "Select messages", phir dusre messages tap karke select karo. Upar se Forward ya Delete kar sakte ho. Bulk forward bhi properly bheja jata hai.',
+      'Double-tap kisi message pe → ❤️ reaction automatically lagti hai (desktop par double-click). Long-press me 6 reactions (❤️ 😂 😮 😢 🙏 👍) ka picker bhi hai. Reaction burst animation bhi dikhti hai.',
   },
   {
-    keys: ['reaction', 'heart', 'double', 'tap', 'love'],
+    keys: ['star', 'starred', 'save message'],
     answer:
-      'Double-tap kisi message pe → ❤️ reaction automatically lag jati hai (desktop par double-click). Normal long-press me 6 reactions ka picker aur Reply, Forward, Copy, Edit, Star, Pin, Info, Delete milte hain.',
+      'Long-press → Star message. Starred messages ⋮ menu → Starred messages me milte hain. "Remove from starred" se hata sakte ho.',
   },
   {
-    keys: ['header', 'name', 'click', 'contact', 'profile', 'info'],
+    keys: ['pin message', 'pinned bar', 'upar dikhe'],
     answer:
-      'Chat header me naam/photo pe click: personal chat me "View contact" panel, group me "Group members" khulta hai. Home list me photo pe click karne se bhi contact actions sheet (Chat/Call/Video/Info) aati hai.',
+      'Message pe long-press → Pin message. Pin karte hi chat ke upar (header ke niche) pinned bar ban jata hai. Uspe tap → us message par scroll; X → unpin. Har chat me max 5 pinned messages.',
   },
   {
-    keys: ['star', 'starred', 'favorite'],
+    keys: ['multi', 'select', 'bulk', 'kai messages'],
     answer:
-      'Message star: long-press → "Star message". Starred messages ⋮ → Starred messages me dekhe sakte ho. Chats ko pin/archive/mute bhi ⋮ menu se kar sakte ho; sidebar me Favorites tab bhi hai.',
+      'Long-press → Select messages. Phir dusre messages tap karke select karo (check icon dikhega). Upar selection bar me "N selected" ke saath Forward aur Delete buttons hote hain. X se cancel.',
   },
   {
-    keys: ['search', 'find', 'export', 'forward'],
+    keys: ['search', 'find message', 'dhundho'],
     answer:
-      '⋮ menu se "Search messages" se is chat me search. Message ko forward karne ke liye long-press → Forward → contact/group chuno. Chat export bhi ⋮ menu me hai (txt file download).',
+      '⋮ menu → Search messages, ya header me search icon. Likhte hi results aur count dikhte hain. Kisi result pe tap → us message par jump + highlight.',
   },
   {
-    keys: ['status', 'story', 'community', 'calls tab'],
+    keys: ['info', 'message info', 'time', 'seen'],
     answer:
-      'Bottom tabs: Chats, Status, Community, Calls. Status me text/image status add kar sakte ho; Community groups dikhati hai; Calls tab me call history aur "Start a call" se naya call.',
+      'Long-press → Message info me message ka time, status (sent/delivered/read) aur details dikhte hain. Bubble ke niche status icons (✓ / ✓✓) bhi hote hain.',
   },
   {
-    keys: ['qr', 'scan', 'block', 'contact add'],
+    keys: ['export', 'download chat', 'backup'],
     answer:
-      'Naya chat:sidebar ke + se New Chat ya Group. QR scan se username dhund kar chat start. Kisi ko block/unblock: chat list me long-press → Block/Unblock ya contact card se.',
+      '⋮ menu → Export chat. Us chat ka text transcript .txt file me download ho jata hai (media nahi).',
   },
   {
-    keys: ['disappear', 'timer', 'view once', 'secret'],
+    keys: ['disappear', 'timer', 'view once', 'expire'],
     answer:
-      '⋮ → Disappearing messages se timer set karo (Off/24h/7d/etc.). View-once media bhi support hai — ek baar dekhne ke baad expire ho jata hai.',
+      '⋮ → Disappearing messages me timer chuno (Off ya 24h/7d jaise options). View-once media ek baar dekhne ke baad expire ho jata hai. Bubble par clock icon iski nishani hai.',
   },
   {
-    keys: ['sound', 'notification', 'desktop', 'push', 'lock', 'theme'],
+    keys: ['new chat', 'start chat', 'contacts'],
     answer:
-      'Profile/Settings se sound, desktop notifications, push, theme (dark/light), reduce motion aur App Lock set kar sakte ho. App Lock PIN 4-digit hai aur mobile par lock hota hai.',
+      'Sidebar ke upar ✉️/New chat button ya menu → New chat. Contact search karke ya QR scan karke naya chat start kar sakte ho. Contacts list saare registered users ki hoti hai.',
   },
   {
-    keys: ['voice', 'audio', 'record', 'message bhej'],
+    keys: ['new group', 'group banao', 'create group'],
     answer:
-      'Composer me mic/se 📎 se voice note ya attachment bhej sakte ho. Text message bhejne ke liye type karke Send. Reply karne ke liye message pe long-press → Reply (ya swipe).',
+      'Sidebar me New group (👥) → group ka naam likho → members select karo → Create. Group banate hi wo open ho jata hai. Kam se kam ek member chunna zaroori hai.',
   },
   {
-    keys: ['ai', 'bot', 'help', 'kya kar', 'features', 'sab'],
+    keys: ['group members', 'add member', 'remove member', 'admin', 'transfer', 'leave group', 'delete group'],
     answer:
-      'Main ChatWave AI hoon — free help bot. Mujhe app ki saari features pata hain: groups, calls, filters, wallpapers, pinned messages, multi-select, QR, status, settings… niche diye gaye topics pe click karo ya apna sawaal likho.',
+      'Group → ⋮ → Group members. Yahan se username search karke member add, Remove button se hata, crown se admin transfer, Delete group se delete, aur Leave group se confirmation ke baad group chhod sakte ho. Add/Remove sirf group creator (admin) ke liye available hai; non-admin khud leave kar sakta hai.',
+  },
+  {
+    keys: ['header', 'name click', 'photo click', 'contact info', 'group info'],
+    answer:
+      'Chat header me naam/photo pe click: personal chat me View contact panel, group me Group members modal khulta hai. Home list me photo pe click → Chat, Call, Video, Info wali actions sheet.',
+  },
+  {
+    keys: ['pin chat', 'unpin chat', 'favourite', 'favorites'],
+    answer:
+      'Chat list me long-press → Pin chat. Pinned chats upar aate hain aur sidebar me "Favorites" tab me dikhte hain. Unpin karne par wapas normal list me.',
+  },
+  {
+    keys: ['archive', 'unarchive'],
+    answer:
+      'Long-press ya ⋮ → Archive chat. Archived chats sidebar ke "Archived" section me (Back to chats se wapas). Unarchive se wapas normal list me.',
+  },
+  {
+    keys: ['mute', 'unmute', 'notification off', '8 hours', '1 week'],
+    answer:
+      'Chat ke ⋮ → Mute notifications me 8 hours, 1 week ya Always (forever) chuno. Muted chat ke paas bell-off icon dikhta hai. Sidebar menu se poori app ki notification sound bhi mute kar sakte ho.',
+  },
+  {
+    keys: ['mark read', 'mark unread', 'unread'],
+    answer:
+      'Chat list me long-press → Mark as read / Mark as unread. Sidebar me "Unread" tab sirf unread chats dikhati hai. Unread count chat list me green badge me hota hai.',
+  },
+  {
+    keys: ['block', 'unblock', 'copy username', 'view profile'],
+    answer:
+      'Chat list me long-press → View profile / Block contact / Copy username. Block karne par uski messages aur calls band ho jate hain. Settings/profile card se Unblock bhi kar sakte ho. Group chats me ye options nahi dikhte (kyunki group me kai members hote hain).',
+  },
+  {
+    keys: ['clear chat'],
+    answer:
+      'Chat list me long-press → Clear chat. Ye sirf aapke device se messages chhupata hai (confirmation ke saath), doosre user ki copy par asar nahi karta.',
+  },
+  {
+    keys: ['sidebar', 'tabs', 'filters', 'all', 'groups tab'],
+    answer:
+      'Sidebar me search box ke niche tabs: All, Unread, Favorites (pinned chats), Groups. Neeche Archived section bhi hai. Upar New chat, New group, QR scan aur ⋮ menu (Profile, Mute notifications, Settings, Log out) hai.',
+  },
+  {
+    keys: ['qr', 'scan', 'qr code', 'add by qr'],
+    answer:
+      'Sidebar me QR icon se scanner kholo — doosre ka QR scan karte hi chat start. Apna QR dikhane ke liye Profile → QR code ya Settings → Show my QR code. QR me username hota hai.',
+  },
+  {
+    keys: ['voice call', 'audio call', 'call karo'],
+    answer:
+      'Personal chat ke header me Phone icon se voice call. Call screen me Mute, Screen share aur End buttons niche hote hain. Block hone par call nahi hoti.',
+  },
+  {
+    keys: ['video call', 'camera call'],
+    answer:
+      'Header me Video icon se video call. Badi video, chhoti self-view, aur niche dock: Mute, Camera (switch), Filters, Share, End. Camera access denied hone par notice aata hai.',
+  },
+  {
+    keys: ['incoming', 'ringing', 'answer', 'decline', 'ringtone'],
+    answer:
+      'Incoming call par poori screen ringtone + avatar ke saath ripple/floating animation dikhti hai. Answer (green) ya Decline (red) dabao. Screen wake-lock bhi on hoti hai taaki call ke time screen band na ho.',
+  },
+  {
+    keys: ['call controls', 'mute', 'camera switch', 'end call'],
+    answer:
+      'Call ke niche ek dock hai: Mic/MicOff (mute), Switch camera (video), ✨ Filters (video), Screen share, aur red End. Sab icons ke saath labels likhe hote hain.',
+  },
+  {
+    keys: ['screen share', 'share screen', 'display'],
+    answer:
+      'Dock me Share dabao → browser screen picker → screen share start. Voice aur video dono calls me kaam karta hai. "Stop share" se band. Share ke time video mirror nahi hota aur filter band rehta hai. Browser support required.',
+  },
+  {
+    keys: ['filter', 'fun filter', 'glow', 'retro', 'neon', 'noir', 'dreamy', 'mono'],
+    answer:
+      'Video call me dock ka ✨ Filters se 7 filters: Original, Glow, Retro, Mono, Dreamy, Neon, Noir. Filter aapko aur doosre ko bhi dikhta hai (signal se sync). Screen share par auto band ho jata hai.',
+  },
+  {
+    keys: ['minimize', 'call notification', 'back during call', 'restore call', 'ongoing'],
+    answer:
+      'Call ke time Back dabao ya upar "Minimize" → call chhoti top banner + persistent system notification me chali jati hai. Audio/video chalta rehta hai. Banner/notification pe tap karke wapas full call screen. Call khatam hone par notification apne aap hat jati hai.',
+  },
+  {
+    keys: ['missed call', 'callback', 'no answer', 'call history'],
+    answer:
+      'Missed call par notification me "Call back" aur "Message" actions hote hain. Calls tab me history dikhti hai — usse call remove bhi kar sakte ho. 45 sec tak answer na mile to "No answer" notification aata hai.',
+  },
+  {
+    keys: ['status', 'story', 'status add'],
+    answer:
+      'Bottom tab "Status" me text status ya image status add karo. Statuses list me dekhe ja sakte hain, view count dikhta hai, aur apna status hata bhi sakte ho.',
+  },
+  {
+    keys: ['community', 'communities'],
+    answer:
+      'Bottom tab "Community" aapke groups dikhati hai. Group pe tap karke us chat me khul jate ho, ya Create se naya group bana sakte ho.',
+  },
+  {
+    keys: ['calls tab', 'history'],
+    answer:
+      'Bottom tab "Calls" me call history (incoming/outgoing/missed, duration) dikhti hai. Har entry ko long-press/right-click se remove, aur "Start a call" se contact ko call kar sakte ho.',
+  },
+  {
+    keys: ['profile', 'edit profile', 'name', 'username', 'avatar', 'bio', 'color'],
+    answer:
+      'Profile tab (Sidebar menu → Profile) me Edit profile se naam, username, profile photo, avatar color aur bio badal sakte ho. Username 3-20 characters ka hona chahiye (letters, numbers, . ya _). Save sirf tabahi ke baad hi band hota hai.',
+  },
+  {
+    keys: ['settings', 'preferences', 'toggle'],
+    answer:
+      'Settings tab me ye sab hai: Show my QR code, Screen lock (mobile), Light theme, Push notifications, Notification sounds, Desktop notifications, Read receipts, Haptic feedback, Reduce motion, aur Help & AI. Sab preferences is device par auto save hote hain.',
+  },
+  {
+    keys: ['screen lock', 'app lock', 'pin', 'lock'],
+    answer:
+      'Settings → Screen lock (sirf mobile me dikhta hai). 4-digit PIN set karo; app kholne par PIN maangta hai. Forgot PIN option se reset kar sakte ho. Ye UI-level lock hai.',
+  },
+  {
+    keys: ['theme', 'light', 'dark'],
+    answer:
+      'Settings → Light theme toggle se dark/light appearance badalti hai. Default dark hai. Reduce motion toggle animations chhota kar deta hai.',
+  },
+  {
+    keys: ['push notification', 'desktop notification', 'sound', 'read receipts', 'haptics'],
+    answer:
+      'Settings me: Push notifications (app band ho to bhi alerts — installed PWA + permission chahiye), Notification sounds (message sound on/off), Desktop notifications (tab background me browser alert), Read receipts (doosre ko pata chale aapne padha), Haptic feedback (swipe/long-press par vibration).',
+  },
+  {
+    keys: ['help', 'ai', 'bot', 'features', 'sab', 'poora', 'pura', 'ek ek', 'list'],
+    answer:
+      'Main ChatWave AI hoon — free help bot. Mujhe app ki har feature aur har setting pata hai. Neeche "Sab features" chip dabao ya koi bhi topic likho: groups, calls, wallpaper, filters, pinned messages, multi-select, settings…',
+  },
+  {
+    keys: ['install', 'pwa', 'home screen'],
+    answer:
+      'Install prompt (ya browser menu → Install app / Add to Home screen) se ChatWave ko phone me app ki tarah install kar sakte ho. Push notifications ke liye installed app best hai.',
+  },
+  {
+    keys: ['login', 'signup', 'sign in', 'sign up', 'account', 'username check'],
+    answer:
+      'Pehle sign up ( naam, email, password, username) ya sign in. Username unique hona chahiye. Stepped signup screen me details step-by-step bhare jate hain. Sign out Sidebar menu se.',
   },
 ]
 
-const QUICK = ['Groups', 'Wallpaper', 'Calls', 'Filters', 'Pinned message', 'Multi-select']
+const ALL_FEATURES = `ChatWave me ye sab hai (ek-ek karke poochho):
+
+• Messages: text, emoji, photo/file, voice note, reply, edit, delete (for me/everyone), copy, forward, reactions, double-tap ❤️, star, pin, multi-select, search, message info, export chat.
+• Chats: new chat, new group, QR scan, pin/archive/mute, mark read/unread, block, clear chat, tabs (All/Unread/Favorites/Groups/Archived).
+• Groups: members add/remove, admin transfer, delete/leave group, group members list.
+• Calls: voice, video, incoming animation, mute, camera switch, fun filters, screen share, minimize + notification, history, missed calls.
+• Tabs: Chats, Status, Community, Calls.
+• Profile & Settings: name/username/avatar/color/bio, QR code, screen lock, light theme, push, sounds, desktop notifications, read receipts, haptics, reduce motion, Help & AI.
+• Extra: disappearing messages aur view-once media.`
+
+const QUICK = [
+  'Sab features',
+  'Settings',
+  'Profile',
+  'Groups',
+  'Calls',
+  'Wallpaper',
+  'Pinned',
+  'Multi-select',
+]
 
 const replyFor = (text) => {
   const query = ` ${text.toLowerCase()} `
+  if (/\b(sab|all|poora|pura|features|ek ek|list|saare)\b/.test(query)) return ALL_FEATURES
   let best = null
   let bestScore = 0
   for (const item of KNOWLEDGE) {
@@ -105,11 +265,11 @@ const replyFor = (text) => {
     }
   }
   if (best) return best.answer
-  return `Iske baare me mujhe abhi exact nahi pata. Ye topics try karo: ${KNOWLEDGE.map(
+  return `Iske baare me mujhe exact nahi pata, par ye topics main jaanta hoon: ${KNOWLEDGE.map(
     (item) => item.keys[0]
   )
-    .slice(0, 8)
-    .join(', ')}. Ya apna sawaal thoda aur detail me likho.`
+    .slice(0, 10)
+    .join(', ')}… "Sab features" likho to poori list de dunga.`
 }
 
 export default function HelpAIModal({ onClose }) {
@@ -117,7 +277,7 @@ export default function HelpAIModal({ onClose }) {
     {
       id: 'welcome',
       from: 'bot',
-      text: "Namaste! Main ChatWave AI hoon 👋 Is app ki koi bhi feature ke baare me poocho — group, call, wallpaper, filters, pinned messages… sab bata sakta hoon.",
+      text: "Namaste! Main ChatWave AI hoon 👋 Mujhe is app ki har feature aur har setting pata hai. Kuch bhi poocho — ya niche 'Sab features' dabao.",
     },
   ])
   const [input, setInput] = useState('')
